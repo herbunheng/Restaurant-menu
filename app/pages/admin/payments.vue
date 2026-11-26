@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import type { PaymentMethodConfig } from '@restaurant-menu/shared';
+import { ref, computed, watch } from 'vue';
+import type { PaymentMethodConfig, SiteSettings } from '@restaurant-menu/shared';
+import { DEFAULT_EXCHANGE_RATE } from '@restaurant-menu/shared';
 
 definePageMeta({
   layout: 'admin',
@@ -9,7 +10,61 @@ definePageMeta({
 const { $api } = useApi();
 const toast = useToast();
 
-// 1. Fetch Payment Methods
+// 1. Fetch Site Settings (Exchange Rate)
+const { data: siteSettingsData, refresh: refreshSiteSettings } = await useApiData<SiteSettings>(
+  'admin-site-settings',
+  '/api/settings'
+);
+
+const exchangeRateInput = ref<number>(siteSettingsData.value?.exchangeRate || DEFAULT_EXCHANGE_RATE);
+const isSavingExchangeRate = ref(false);
+const exchangeRatePresets = [4000, 4050, 4100, 4150, 4200];
+
+watch(siteSettingsData, (newVal) => {
+  if (newVal?.exchangeRate) {
+    exchangeRateInput.value = newVal.exchangeRate;
+  }
+}, { immediate: true });
+
+async function handleSaveExchangeRate() {
+  const rate = Number(exchangeRateInput.value);
+  if (!rate || rate <= 0) {
+    toast.add({
+      title: 'អត្រាប្តូរប្រាក់មិនត្រឹមត្រូវ',
+      description: 'សូមបញ្ចូលចំនួនទឹកប្រាក់រៀលដែលត្រឹមត្រូវ (ឧ. 4000)',
+      color: 'warning',
+    });
+    return;
+  }
+
+  isSavingExchangeRate.value = true;
+  try {
+    await $api('/api/settings', {
+      method: 'PUT',
+      body: {
+        exchangeRate: rate,
+      },
+    });
+
+    await refreshSiteSettings();
+
+    toast.add({
+      title: 'បានផ្លាស់ប្តូរអត្រាប្តូរប្រាក់ជោគជ័យ!',
+      description: `អត្រាថ្មី $1.00 = ${rate.toLocaleString()} ៛ ត្រូវបានរក្សាទុក និងអនុវត្តទូទាំងប្រព័ន្ធ`,
+      color: 'success',
+    });
+  } catch (err: any) {
+    toast.add({
+      title: 'បរាជ័យក្នុងការរក្សាទុក',
+      description: err.message || 'Failed to update exchange rate',
+      color: 'error',
+    });
+  } finally {
+    isSavingExchangeRate.value = false;
+  }
+}
+
+// 2. Fetch Payment Methods
 const { data: paymentMethodsData, status: fetchStatus, refresh: fetchPaymentMethods } = await useApiData<PaymentMethodConfig[]>(
   'admin-payment-methods',
   '/api/payment-methods'
@@ -263,6 +318,86 @@ function getMethodBadgeColor(code: string) {
         >
           <UIcon name="i-heroicons-plus" class="w-4 h-4" />
           <span>បន្ថែមវិធីសាស្ត្រថ្មី</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 1. EXCHANGE RATE CONFIGURATION CARD (កំណត់អត្រាប្តូរប្រាក់ $1 = ... ៛) -->
+    <div class="p-5 rounded-3xl bg-linear-to-r from-emerald-500/10 via-teal-500/10 to-transparent border border-emerald-500/30 dark:border-emerald-500/20 shadow-xs space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <UIcon name="i-heroicons-arrows-right-left" class="w-6 h-6" />
+          </div>
+          <div>
+            <h2 class="text-base font-black text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
+              <span>កំណត់អត្រាប្តូរប្រាក់ស្តង់ដារ (Exchange Rate)</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-mono">
+                $1.00 = {{ (siteSettingsData?.exchangeRate || exchangeRateInput).toLocaleString() }} ៛
+              </span>
+            </h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              ប្រើប្រាស់សម្រាប់គណនាលុយរៀលលើ POS, ផ្ទាំងគិតលុយ, វិក្កយបត្រ (Receipt), និងរបាយការណ៍បិទបញ្ជី
+            </p>
+          </div>
+        </div>
+
+        <!-- Current Status Badge -->
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-800/60 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+          <UIcon name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-500" />
+          <span>អត្រាបច្ចុប្បន្ន៖ $1 = {{ (siteSettingsData?.exchangeRate || 4000).toLocaleString() }} ៛</span>
+        </div>
+      </div>
+
+      <!-- Input Controls & Quick Presets -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-900/40">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              អត្រាថ្មី ($1 = ? ៛)៖
+            </span>
+            <div class="relative w-36">
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 font-mono">៛</span>
+              <input
+                v-model.number="exchangeRateInput"
+                type="number"
+                step="50"
+                min="1000"
+                max="10000"
+                placeholder="4000"
+                class="w-full pl-3 pr-7 py-2 rounded-xl text-sm font-black font-mono bg-white dark:bg-gray-900 border border-emerald-300 dark:border-emerald-700 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <!-- Quick Presets -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[11px] text-gray-400 font-medium">ជម្រើសរហ័ស៖</span>
+            <button
+              v-for="p in exchangeRatePresets"
+              :key="p"
+              type="button"
+              class="px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all border cursor-pointer"
+              :class="exchangeRateInput === p
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs scale-102'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'"
+              @click="exchangeRateInput = p"
+            >
+              {{ p.toLocaleString() }} ៛
+            </button>
+          </div>
+        </div>
+
+        <!-- Save Button -->
+        <button
+          type="button"
+          :disabled="isSavingExchangeRate || exchangeRateInput === siteSettingsData?.exchangeRate"
+          class="px-4 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          @click="handleSaveExchangeRate"
+        >
+          <UIcon v-if="isSavingExchangeRate" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+          <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
+          <span>{{ exchangeRateInput === siteSettingsData?.exchangeRate ? 'អត្រានេះកំពុងប្រើប្រាស់' : `រក្សាទុក ($1 = ${exchangeRateInput.toLocaleString()} ៛)` }}</span>
         </button>
       </div>
     </div>
