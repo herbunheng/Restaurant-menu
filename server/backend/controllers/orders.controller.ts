@@ -4,7 +4,9 @@ import {
   createErrorResponse,
   CreateOrderInputSchema,
   UpdateOrderInputSchema,
+  SplitPayInputSchema,
   type Order,
+  type OrderItem,
   type DailyReport,
   type TopSellingItem,
 } from '@restaurant-menu/shared';
@@ -302,6 +304,188 @@ export async function updateOrderController(c: Context<AppEnv>) {
     return c.json(createSuccessResponse(finalOrder as unknown as Order), 200);
   } catch (err: any) {
     return c.json(createErrorResponse('DB_ERROR', err.message || 'Failed to update order'), 500);
+  }
+}
+
+export async function splitPayOrderController(c: Context<AppEnv>) {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const parsed = SplitPayInputSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      createErrorResponse('VALIDATION_ERROR', parsed.error.issues[0]?.message || 'Invalid split payment data'),
+      400
+    );
+  }
+
+  const { itemsToPay, paymentMethod = 'cash', discount = 0, cashierName = 'Cashier', note = '' } = parsed.data;
+
+  // 1. Calculate paid items
+  const calculatedPaidItems = itemsToPay.map((it) => ({
+    ...it,
+    subtotal: Number((it.price * it.quantity).toFixed(2)),
+  }));
+  const paidSubtotal = Number(calculatedPaidItems.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
+  const paidTotal = Math.max(0, Number((paidSubtotal - discount).toFixed(2)));
+
+  // If mock in local dev:
+  if (!c.env?.DB) {
+    const idx = mockOrders.findIndex((o) => o.id === id);
+    if (idx === -1) {
+      return c.json(createErrorResponse('NOT_FOUND', 'Original order not found'), 404);
+    }
+    const original = mockOrders[idx]!;
+
+    const splitPaidOrder: Order = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      orderNumber: nextOrderSeq++,
+      tableNumber: `${original.tableNumber} (Split)`,
+      items: calculatedPaidItems,
+      subtotal: paidSubtotal,
+      discount,
+      totalAmount: paidTotal,
+      paymentMethod,
+      paymentStatus: 'paid',
+      cashierName,
+      note: note || `Split payment from Order #${original.orderNumber}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mockOrders.unshift(splitPaidOrder);
+
+    // Calculate remaining items for original order
+    const remainingItems: OrderItem[] = [];
+    for (const origItem of original.items) {
+      const matchPaid = calculatedPaidItems.find(
+        (p) => p.menuItemId === origItem.menuItemId && p.variantLabel === origItem.variantLabel
+      );
+      if (matchPaid) {
+        const remainingQty = origItem.quantity - matchPaid.quantity;
+        if (remainingQty > 0) {
+          remainingItems.push({
+            ...origItem,
+            quantity: remainingQty,
+            subtotal: Number((origItem.price * remainingQty).toFixed(2)),
+          });
+        }
+      } else {
+        remainingItems.push(origItem);
+      }
+    }
+
+    if (remainingItems.length === 0) {
+      original.paymentStatus = 'paid';
+      original.updatedAt = new Date();
+    } else {
+      original.items = remainingItems;
+      original.subtotal = Number(remainingItems.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
+      original.totalAmount = Math.max(0, Number((original.subtotal - original.discount).toFixed(2)));
+      original.updatedAt = new Date();
+    }
+
+    return c.json(
+      createSuccessResponse({
+        paidOrder: splitPaidOrder,
+        remainingOrder: original,
+      }),
+      200
+    );
+  }
+
+  // Database path:
+  try {
+    const db = getDb(c.env.DB);
+    const existing = await db.select().from(orders).where(eq(orders.id, id)).get();
+
+    if (!existing) {
+      return c.json(createErrorResponse('NOT_FOUND', 'Original order not found'), 404);
+    }
+
+    const original = existing as unknown as Order;
+
+    const splitPaidOrder: Order = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      orderNumber: nextOrderSeq++,
+      tableNumber: `${original.tableNumber} (Split)`,
+      items: calculatedPaidItems,
+      subtotal: paidSubtotal,
+      discount,
+      totalAmount: paidTotal,
+      paymentMethod,
+      paymentStatus: 'paid',
+      cashierName,
+      note: note || `Split payment from Order #${original.orderNumber}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    await db.insert(orders).values({
+      id: splitPaidOrder.id,
+      orderNumber: splitPaidOrder.orderNumber,
+      tableNumber: splitPaidOrder.tableNumber,
+      items: splitPaidOrder.items,
+      subtotal: splitPaidOrder.subtotal,
+      discount: splitPaidOrder.discount,
+      totalAmount: splitPaidOrder.totalAmount,
+      paymentMethod: splitPaidOrder.paymentMethod,
+      paymentStatus: splitPaidOrder.paymentStatus,
+      cashierName: splitPaidOrder.cashierName,
+      note: splitPaidOrder.note,
+      createdAt: splitPaidOrder.createdAt as Date,
+      updatedAt: splitPaidOrder.updatedAt as Date,
+    });
+
+    // Calculate remaining items
+    const remainingItems: OrderItem[] = [];
+    for (const origItem of original.items) {
+      const matchPaid = calculatedPaidItems.find(
+        (p) => p.menuItemId === origItem.menuItemId && p.variantLabel === origItem.variantLabel
+      );
+      if (matchPaid) {
+        const remainingQty = origItem.quantity - matchPaid.quantity;
+        if (remainingQty > 0) {
+          remainingItems.push({
+            ...origItem,
+            quantity: remainingQty,
+            subtotal: Number((origItem.price * remainingQty).toFixed(2)),
+          });
+        }
+      } else {
+        remainingItems.push(origItem);
+      }
+    }
+
+    if (remainingItems.length === 0) {
+      await db
+        .update(orders)
+        .set({ paymentStatus: 'paid', updatedAt: new Date() })
+        .where(eq(orders.id, id));
+    } else {
+      const remSubtotal = Number(remainingItems.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
+      const remTotal = Math.max(0, Number((remSubtotal - original.discount).toFixed(2)));
+      await db
+        .update(orders)
+        .set({
+          items: remainingItems,
+          subtotal: remSubtotal,
+          totalAmount: remTotal,
+          updatedAt: new Date(),
+        })
+        .where(eq(orders.id, id));
+    }
+
+    const updatedRemaining = await db.select().from(orders).where(eq(orders.id, id)).get();
+
+    return c.json(
+      createSuccessResponse({
+        paidOrder: splitPaidOrder,
+        remainingOrder: updatedRemaining as unknown as Order,
+      }),
+      200
+    );
+  } catch (err: any) {
+    return c.json(createErrorResponse('DB_ERROR', err.message || 'Failed to process split payment'), 500);
   }
 }
 

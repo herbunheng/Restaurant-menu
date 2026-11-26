@@ -411,6 +411,16 @@ export const UpdateOrderInputSchema = z.object({
 
 export type UpdateOrderInput = z.infer<typeof UpdateOrderInputSchema>;
 
+export const SplitPayInputSchema = z.object({
+  itemsToPay: z.array(OrderItemSchema).min(1, 'At least one item must be selected to pay'),
+  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional().default('cash'),
+  discount: z.coerce.number().min(0).optional().default(0),
+  cashierName: z.string().optional().default('Cashier'),
+  note: z.string().optional().default(''),
+});
+
+export type SplitPayInput = z.infer<typeof SplitPayInputSchema>;
+
 export interface TopSellingItem {
   name: string;
   variantLabel?: string;

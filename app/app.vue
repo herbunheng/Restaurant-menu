@@ -21,13 +21,10 @@ useSeoMeta({
   ogDescription: description,
 })
 
-const { autoInitPushNotifications, startBroadcastListener } = useWebPush()
+const { autoInitPushNotifications } = useWebPush()
 
 onMounted(() => {
   if (import.meta.client) {
-    // Start background broadcast listener immediately
-    startBroadcastListener()
-
     // Delay prompting the user for notification permission by 2 minutes (120,000 ms)
     setTimeout(() => {
       autoInitPushNotifications()

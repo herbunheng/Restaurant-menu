@@ -3,6 +3,7 @@ import {
   listOrdersController,
   createOrderController,
   updateOrderController,
+  splitPayOrderController,
   getActiveOrdersController,
   getDailyReportController,
 } from '../controllers/orders.controller';
@@ -24,3 +25,6 @@ ordersRouter.post('/', createOrderController);
 
 // PUT /api/orders/:id - Append items, update note, or checkout
 ordersRouter.put('/:id', updateOrderController);
+
+// POST /api/orders/:id/split-pay - Pay specific selected items from a table
+ordersRouter.post('/:id/split-pay', splitPayOrderController);

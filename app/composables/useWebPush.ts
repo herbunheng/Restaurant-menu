@@ -71,8 +71,6 @@ export function useWebPush() {
       });
     }
 
-    startBroadcastListener();
-
     return subscription;
   }
 
@@ -82,8 +80,6 @@ export function useWebPush() {
   async function autoInitPushNotifications() {
     if (!import.meta.client) return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-    startBroadcastListener();
 
     if (Notification.permission === 'denied') return;
 

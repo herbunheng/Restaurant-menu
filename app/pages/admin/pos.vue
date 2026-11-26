@@ -122,6 +122,122 @@ const activeItemForVariant = ref<MenuItem | null>(null);
 const isReceiptModalOpen = ref(false);
 const lastSavedOrder = ref<Order | null>(null);
 
+// Split Bill Modal State
+const isSplitModalOpen = ref(false);
+const splitItems = ref<{
+  menuItemId: string;
+  name: string;
+  variantLabel: string;
+  price: number;
+  availableQty: number;
+  qtyToPay: number;
+  note: string;
+}[]>([]);
+const splitPaymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
+const isSubmittingSplit = ref(false);
+
+function openSplitModal() {
+  if (!isCurrentTableOccupied.value || cart.value.length === 0) return;
+
+  // Initialize split items with qtyToPay: 0
+  splitItems.value = cart.value.map((it) => ({
+    menuItemId: it.menuItemId,
+    name: it.name,
+    variantLabel: it.variantLabel || '',
+    price: it.price,
+    availableQty: it.quantity,
+    qtyToPay: 0,
+    note: it.note || '',
+  }));
+
+  splitPaymentMethod.value = paymentMethod.value || 'cash';
+  isSplitModalOpen.value = true;
+}
+
+const splitTotalUSD = computed(() => {
+  const sum = splitItems.value.reduce((acc, curr) => acc + (curr.price * curr.qtyToPay), 0);
+  return Number(sum.toFixed(2));
+});
+
+const splitSelectedCount = computed(() => {
+  return splitItems.value.reduce((acc, curr) => acc + curr.qtyToPay, 0);
+});
+
+function updateSplitQty(index: number, delta: number) {
+  const it = splitItems.value[index];
+  if (!it) return;
+  const newQty = it.qtyToPay + delta;
+  if (newQty >= 0 && newQty <= it.availableQty) {
+    it.qtyToPay = newQty;
+  }
+}
+
+async function handleConfirmSplitPay() {
+  const itemsToPay = splitItems.value
+    .filter((it) => it.qtyToPay > 0)
+    .map((it) => ({
+      menuItemId: it.menuItemId,
+      name: it.name,
+      variantLabel: it.variantLabel,
+      price: it.price,
+      quantity: it.qtyToPay,
+      subtotal: Number((it.price * it.qtyToPay).toFixed(2)),
+      note: it.note,
+    }));
+
+  if (itemsToPay.length === 0) {
+    toast.add({
+      title: 'សូមជ្រើសរើសមុខម្ហូប',
+      description: 'សូមជ្រើសរើសមុខម្ហូបយ៉ាងហោចណាស់មួយដើម្បីគិតលុយបំបែក',
+      color: 'warning',
+    });
+    return;
+  }
+
+  if (!currentActiveOrder.value) return;
+
+  isSubmittingSplit.value = true;
+  try {
+    const res: any = await $api(`/api/orders/${currentActiveOrder.value.id}/split-pay`, {
+      method: 'POST',
+      body: {
+        itemsToPay,
+        paymentMethod: splitPaymentMethod.value,
+        cashierName: 'Cashier 01',
+      },
+    });
+
+    const data = res?.data || res;
+    lastSavedOrder.value = data.paidOrder;
+    isSplitModalOpen.value = false;
+    isReceiptModalOpen.value = true;
+
+    // Update current cart to remaining items
+    if (data.remainingOrder && data.remainingOrder.paymentStatus === 'pending') {
+      cart.value = JSON.parse(JSON.stringify(data.remainingOrder.items));
+    } else {
+      // Table fully paid
+      cart.value = [];
+    }
+
+    await refreshActiveOrders();
+
+    toast.add({
+      title: 'គិតលុយបំបែកជោគជ័យ!',
+      description: `បានគិតលុយ $${splitTotalUSD.value.toFixed(2)} សម្រាប់ ${itemsToPay.length} មុខ`,
+      color: 'success',
+    });
+  } catch (err: any) {
+    toast.add({
+      title: 'បរាជ័យក្នុងការគិតលុយបំបែក',
+      description: err.message || 'Failed to process split payment',
+      color: 'error',
+    });
+  } finally {
+    isSubmittingSplit.value = false;
+  }
+}
+
 // Calculations
 const subtotal = computed(() => {
   return Number(cart.value.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
@@ -505,7 +621,7 @@ function handlePrint() {
 
     <!-- RIGHT SIDE: LIVE ORDER BILL / SLIP (35% width on desktop) -->
     <div class="w-full lg:w-96 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden shrink-0">
-      <!-- Order Header with Clear Active/New Mode Indicator -->
+      <!-- Order Header with Clear Active/New Mode Indicator and Split Button -->
       <div
         class="p-4 border-b transition-colors flex items-center justify-between shrink-0"
         :class="[
@@ -550,16 +666,30 @@ function handlePrint() {
           </div>
         </div>
 
-        <button
-          type="button"
-          class="p-1.5 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-          title="Clear order"
-          :disabled="cart.length === 0"
-          :class="{ 'opacity-30 cursor-not-allowed': cart.length === 0 }"
-          @click="clearCart"
-        >
-          <UIcon name="i-heroicons-trash" class="w-4 h-4" />
-        </button>
+        <div class="flex items-center gap-1.5">
+          <!-- Split Bill Button (Only when occupied and has items) -->
+          <button
+            v-if="isCurrentTableOccupied && cart.length > 0"
+            type="button"
+            class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+            title="គិតលុយបំបែកមុខម្ហូប (Split Bill)"
+            @click="openSplitModal"
+          >
+            <UIcon name="i-heroicons-scissors" class="w-3.5 h-3.5" />
+            <span>Split Bill</span>
+          </button>
+
+          <button
+            type="button"
+            class="p-1.5 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+            title="Clear order"
+            :disabled="cart.length === 0"
+            :class="{ 'opacity-30 cursor-not-allowed': cart.length === 0 }"
+            @click="clearCart"
+          >
+            <UIcon name="i-heroicons-trash" class="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <!-- Order Items List (Scrollable) -->
@@ -882,6 +1012,151 @@ function handlePrint() {
           >
             <UIcon name="i-heroicons-printer" class="w-4 h-4" />
             <span>Print Slip (ព្រីន)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 3: SPLIT BILL POPUP (ផ្ទាំងគិតលុយបំបែកមុខម្ហូប) -->
+    <div
+      v-if="isSplitModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+    >
+      <div class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[90vh] flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-start justify-between pb-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <div>
+            <h3 class="font-extrabold text-base text-gray-900 dark:text-white flex items-center gap-1.5">
+              <UIcon name="i-heroicons-scissors" class="w-5 h-5 text-amber-500" />
+              <span>គិតលុយបំបែក (Split Bill) - {{ currentSelectedTableName }}</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              ជ្រើសរើសមុខម្ហូប និងចំនួនដែលមិត្តភក្តិគាត់សុំគិតលុយមុន
+            </p>
+          </div>
+          <button
+            type="button"
+            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="isSplitModalOpen = false"
+          >
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Items with Stepper to Pay Now (Scrollable) -->
+        <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 divide-y divide-gray-100 dark:divide-gray-800">
+          <div
+            v-for="(it, itIdx) in splitItems"
+            :key="itIdx"
+            class="pt-2 flex items-center justify-between gap-3"
+          >
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-bold text-gray-900 dark:text-white truncate">
+                {{ it.name }}
+              </p>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span
+                  v-if="it.variantLabel"
+                  class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                >
+                  {{ it.variantLabel }}
+                </span>
+                <span class="text-[11px] text-gray-400 font-mono">
+                  ${{ it.price.toFixed(2) }} (តុមាន {{ it.availableQty }})
+                </span>
+              </div>
+            </div>
+
+            <!-- Qty to pay stepper -->
+            <div class="flex items-center gap-2 shrink-0">
+              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 font-bold text-xs cursor-pointer"
+                  @click="updateSplitQty(itIdx, -1)"
+                >
+                  -
+                </button>
+                <span
+                  class="w-6 text-center text-xs font-black font-mono"
+                  :class="it.qtyToPay > 0 ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'"
+                >
+                  {{ it.qtyToPay }}
+                </span>
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 font-bold text-xs cursor-pointer"
+                  @click="updateSplitQty(itIdx, 1)"
+                >
+                  +
+                </button>
+              </div>
+
+              <!-- Subtotal for this item -->
+              <span class="w-14 text-right text-xs font-bold font-mono text-gray-900 dark:text-white">
+                ${{ (it.price * it.qtyToPay).toFixed(2) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Total Calculation for Split Items -->
+        <div class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-3 shrink-0 bg-gray-50/70 dark:bg-gray-800/40 p-3 rounded-2xl">
+          <div class="flex items-baseline justify-between text-xs">
+            <span class="font-bold text-gray-700 dark:text-gray-300">
+              សរុបមុខម្ហូបដែលគិតមុន ({{ splitSelectedCount }} items):
+            </span>
+            <div class="text-right">
+              <span class="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
+                ${{ splitTotalUSD.toFixed(2) }}
+              </span>
+              <span class="block text-[11px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                ≈ {{ formatRiel(splitTotalUSD) }} ៛
+              </span>
+            </div>
+          </div>
+
+          <!-- Payment Method Toggle -->
+          <div class="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
+              :class="splitPaymentMethod === 'cash' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="splitPaymentMethod = 'cash'"
+            >
+              <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5" />
+              <span>Cash</span>
+            </button>
+            <button
+              type="button"
+              class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
+              :class="splitPaymentMethod === 'khqr' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="splitPaymentMethod = 'khqr'"
+            >
+              <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5" />
+              <span>KHQR</span>
+            </button>
+            <button
+              type="button"
+              class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
+              :class="splitPaymentMethod === 'card' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="splitPaymentMethod = 'card'"
+            >
+              <UIcon name="i-heroicons-credit-card" class="w-3.5 h-3.5" />
+              <span>Card</span>
+            </button>
+          </div>
+
+          <!-- Confirm Button -->
+          <button
+            type="button"
+            :disabled="splitSelectedCount === 0 || isSubmittingSplit"
+            class="w-full py-2.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="handleConfirmSplitPay"
+          >
+            <UIcon v-if="isSubmittingSplit" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
+            <span>គិតលុយមុខម្ហូបទាំងនេះ (${{ splitTotalUSD.toFixed(2) }}) & ចេញវិក្កយបត្រ</span>
           </button>
         </div>
       </div>
