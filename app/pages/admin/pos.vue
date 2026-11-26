@@ -1094,14 +1094,13 @@ function handlePrint() {
 
             <div class="flex items-center gap-2 text-xs">
               <!-- Live Exchange Rate Switcher Button -->
-              <button
-                type="button"
+              <button type="button"
                 class="py-1 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 shadow-2xs group"
-                title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់ $1 = ... ៛"
-                @click="openExchangeRateModal"
-              >
-                <UIcon name="i-heroicons-arrows-right-left" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:rotate-180 transition-transform duration-300" />
-                <span class="font-mono text-emerald-700 dark:text-emerald-300">$1 = {{ currentExchangeRate.toLocaleString() }} ៛</span>
+                title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់ $1 = ... ៛" @click="openExchangeRateModal">
+                <UIcon name="i-heroicons-arrows-right-left"
+                  class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:rotate-180 transition-transform duration-300" />
+                <span class="font-mono text-emerald-700 dark:text-emerald-300">$1 = {{
+                  currentExchangeRate.toLocaleString() }} ៛</span>
                 <span class="text-[10px] text-gray-400 font-normal group-hover:text-emerald-600 underline">កែប្រែ</span>
               </button>
 
@@ -1230,7 +1229,7 @@ function handlePrint() {
               <div class="flex items-baseline justify-between gap-1">
                 <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   <template v-if="item.hasVariants && item.variants && item.variants.length > 0">
-                    {{ formatRiel(Math.min(...item.variants.map((v) => Number(v.price)))) }} ៛+
+                    {{formatRiel(Math.min(...item.variants.map((v) => Number(v.price))))}} ៛+
                   </template>
                   <template v-else>
                     {{ formatRiel(Number(item.price)) }} ៛
@@ -1238,7 +1237,7 @@ function handlePrint() {
                 </span>
                 <span class="text-[10px] text-gray-400 font-mono shrink-0">
                   <template v-if="item.hasVariants && item.variants && item.variants.length > 0">
-                    ${{ Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2) }}+
+                    ${{Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2)}}+
                   </template>
                   <template v-else>
                     ${{ Number(item.price).toFixed(2) }}
@@ -1994,12 +1993,9 @@ function handlePrint() {
             <span class="text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">
               ≈ ${{ totalAmount.toFixed(2) }} (អត្រាប្តូរប្រាក់ $1 = {{ currentExchangeRate.toLocaleString() }} ៛)
             </span>
-            <button
-              type="button"
+            <button type="button"
               class="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
-              title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់"
-              @click="openExchangeRateModal"
-            >
+              title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់" @click="openExchangeRateModal">
               [កែប្រែ]
             </button>
           </div>
@@ -2124,10 +2120,13 @@ function handlePrint() {
           </div>
 
           <!-- Total Received & Change calculation display -->
-          <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 space-y-2">
+          <div
+            class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 space-y-2">
             <div class="flex items-center justify-between text-xs font-mono">
               <span class="text-gray-500">សរុបប្រាក់ទទួល (គិតជារៀល)៖</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛ (≈ ${{ (totalCashReceivedInKHR / currentExchangeRate).toFixed(2) }})</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛ (≈
+                ${{
+                  (totalCashReceivedInKHR / currentExchangeRate).toFixed(2) }})</span>
             </div>
 
             <!-- Missing Alert -->
@@ -2144,8 +2143,11 @@ function handlePrint() {
             <div v-else
               class="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-center justify-between">
               <div>
-                <span class="text-xs font-bold text-amber-900 dark:text-amber-200 block">ប្រាក់អាប់ជូនភ្ញៀវ (លុយរៀល)៖</span>
-                <span class="text-[10px] text-amber-700 dark:text-amber-400 font-mono">≈ ${{ checkoutChangeUSD.toFixed(2) }}</span>
+                <span class="text-xs font-bold text-amber-900 dark:text-amber-200 block">ប្រាក់អាប់ជូនភ្ញៀវ
+                  (លុយរៀល)៖</span>
+                <span class="text-[10px] text-amber-700 dark:text-amber-400 font-mono">≈ ${{
+                  checkoutChangeUSD.toFixed(2)
+                }}</span>
               </div>
               <span class="text-xl font-black font-mono text-amber-600 dark:text-amber-400">
                 {{ checkoutChangeKHR.toLocaleString() }} ៛
@@ -2289,7 +2291,9 @@ function handlePrint() {
           <div class="min-w-0 flex-1">
             <p class="text-xs font-bold text-blue-900 dark:text-blue-200">ទូទាត់តាមកាតធនាគារ</p>
             <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
-              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន <strong class="font-mono text-sm text-blue-950 dark:text-blue-100">{{ formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }}) មុននឹងចុចបញ្ជាក់។
+              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន <strong
+                class="font-mono text-sm text-blue-950 dark:text-blue-100">{{
+                  formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }}) មុននឹងចុចបញ្ជាក់។
             </p>
           </div>
         </div>
@@ -2304,7 +2308,8 @@ function handlePrint() {
                 class="max-h-48 w-auto object-contain rounded-xl mx-auto" />
             </div>
             <p class="text-xs font-bold text-sky-800 dark:text-sky-300">
-              ស្កេនទូទាត់ទឹកប្រាក់ <span class="font-mono text-base font-black text-sky-950 dark:text-sky-100">{{ formatRiel(totalAmount) }} ៛</span> (≈ ${{ totalAmount.toFixed(2) }})
+              ស្កេនទូទាត់ទឹកប្រាក់ <span class="font-mono text-base font-black text-sky-950 dark:text-sky-100">{{
+                formatRiel(totalAmount) }} ៛</span> (≈ ${{ totalAmount.toFixed(2) }})
             </p>
           </div>
 
@@ -2410,7 +2415,8 @@ function handlePrint() {
     <div v-if="isExchangeRateModalOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
       @click.self="isExchangeRateModalOpen = false">
-      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+      <div
+        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
         <!-- Header -->
         <div class="flex items-start justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
           <div>
@@ -2422,7 +2428,8 @@ function handlePrint() {
               កំណត់តម្លៃ ១ ដុល្លារ ($) ស្មើនឹងប៉ុន្មានរៀល (៛) សម្រាប់ហាង
             </p>
           </div>
-          <button type="button" class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+          <button type="button"
+            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
             @click="isExchangeRateModalOpen = false">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
@@ -2435,15 +2442,9 @@ function handlePrint() {
           </label>
           <div class="relative">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-emerald-600">៛</span>
-            <input
-              v-model.number="tempExchangeRateInput"
-              type="number"
-              step="10"
-              min="1000"
-              placeholder="4000"
+            <input v-model.number="tempExchangeRateInput" type="number" step="10" min="1000" placeholder="4000"
               class="w-full pl-8 pr-12 py-2.5 text-lg font-black font-mono rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
-              @keydown.enter="saveExchangeRate"
-            />
+              @keydown.enter="saveExchangeRate" />
             <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">រៀល</span>
           </div>
 
@@ -2451,16 +2452,12 @@ function handlePrint() {
           <div class="space-y-1 pt-1">
             <span class="text-[11px] font-medium text-gray-400">អត្រាទូទៅពេញនិយម៖</span>
             <div class="grid grid-cols-4 gap-1.5">
-              <button
-                v-for="r in [4000, 4050, 4100, 4150]"
-                :key="r"
-                type="button"
+              <button v-for="r in [4000, 4050, 4100, 4150]" :key="r" type="button"
                 class="py-1 px-2 rounded-lg text-xs font-bold font-mono transition-all border cursor-pointer text-center"
                 :class="tempExchangeRateInput === r
                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                   : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400'"
-                @click="tempExchangeRateInput = r"
-              >
+                @click="tempExchangeRateInput = r">
                 {{ r.toLocaleString() }} ៛
               </button>
             </div>
@@ -2469,19 +2466,14 @@ function handlePrint() {
 
         <!-- Actions -->
         <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-            @click="isExchangeRateModalOpen = false"
-          >
+            @click="isExchangeRateModalOpen = false">
             បោះបង់
           </button>
-          <button
-            type="button"
-            :disabled="isUpdatingRate || !tempExchangeRateInput || tempExchangeRateInput <= 0"
+          <button type="button" :disabled="isUpdatingRate || !tempExchangeRateInput || tempExchangeRateInput <= 0"
             class="flex-2 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
-            @click="saveExchangeRate"
-          >
+            @click="saveExchangeRate">
             <UIcon v-if="isUpdatingRate" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
             <span>រក្សាទុកអត្រាថ្មី ({{ tempExchangeRateInput?.toLocaleString() || 4000 }} ៛)</span>
