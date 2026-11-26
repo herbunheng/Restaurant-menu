@@ -136,9 +136,27 @@ function getStatusColor(status: string) {
     <!-- Header Controls -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-2xl font-extrabold tracking-tight">Users & Role Directory</h1>
+        <!-- Tabs between Staff & Users -->
+        <div class="flex items-center gap-2 mb-2">
+          <NuxtLink
+            to="/admin/staff"
+            class="px-3 py-1 rounded-xl text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+          >
+            <UIcon name="i-heroicons-user-group" class="w-4 h-4" />
+            <span>បុគ្គលិកហាង (Staff)</span>
+          </NuxtLink>
+          <NuxtLink
+            to="/admin/users"
+            class="px-3 py-1 rounded-xl text-xs font-bold bg-primary-600 text-white shadow-xs flex items-center gap-1.5"
+          >
+            <UIcon name="i-heroicons-users" class="w-4 h-4" />
+            <span>គណនីប្រព័ន្ធ (Users)</span>
+          </NuxtLink>
+        </div>
+
+        <h1 class="text-2xl font-extrabold tracking-tight">អ្នកប្រើប្រាស់ និងសិទ្ធិប្រព័ន្ធ (Users)</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          Manage registered users, access control levels, and active user profiles.
+          គ្រប់គ្រងគណនីអ្នកប្រើប្រាស់ប្រព័ន្ធ និងកម្រិតសិទ្ធិចូលប្រើប្រាស់
         </p>
       </div>
 

@@ -377,9 +377,12 @@ export const OrderSchema = z.object({
   subtotal: z.number(),
   discount: z.number().default(0),
   totalAmount: z.number(),
-  paymentMethod: z.enum(['cash', 'khqr', 'card']).default('cash'),
+  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).default('cash'),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).default('paid'),
   cashierName: z.string().optional().default('Cashier'),
+  waiterName: z.string().nullable().optional(),
+  billedBy: z.string().nullable().optional(),
+  billedAt: z.union([z.date(), z.string()]).nullable().optional(),
   note: z.string().nullable().optional(),
   createdAt: z.union([z.date(), z.string()]).nullable().optional(),
   updatedAt: z.union([z.date(), z.string()]).nullable().optional(),
@@ -391,9 +394,12 @@ export const CreateOrderInputSchema = z.object({
   tableNumber: z.string().min(1, 'Table number is required'),
   items: z.array(OrderItemSchema).min(1, 'Order must contain at least one item'),
   discount: z.coerce.number().min(0).optional().default(0),
-  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional().default('cash'),
+  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional().default('cash'),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional().default('paid'),
   cashierName: z.string().optional().default('Cashier'),
+  waiterName: z.string().optional().default(''),
+  billedBy: z.string().optional().default(''),
+  billedAt: z.union([z.date(), z.string()]).nullable().optional(),
   note: z.string().optional().default(''),
 });
 
@@ -403,9 +409,12 @@ export const UpdateOrderInputSchema = z.object({
   tableNumber: z.string().optional(),
   items: z.array(OrderItemSchema).optional(),
   discount: z.coerce.number().min(0).optional(),
-  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional(),
+  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional(),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional(),
   cashierName: z.string().optional(),
+  waiterName: z.string().optional(),
+  billedBy: z.string().optional(),
+  billedAt: z.union([z.date(), z.string()]).nullable().optional(),
   note: z.string().optional(),
 });
 
@@ -413,7 +422,7 @@ export type UpdateOrderInput = z.infer<typeof UpdateOrderInputSchema>;
 
 export const SplitPayInputSchema = z.object({
   itemsToPay: z.array(OrderItemSchema).min(1, 'At least one item must be selected to pay'),
-  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional().default('cash'),
+  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional().default('cash'),
   discount: z.coerce.number().min(0).optional().default(0),
   cashierName: z.string().optional().default('Cashier'),
   note: z.string().optional().default(''),
@@ -441,4 +450,74 @@ export interface DailyReport {
   topSellingItems: TopSellingItem[];
   orders: Order[];
 }
+
+// ==========================================
+// Staff Schema & Types (ការគ្រប់គ្រងបុគ្គលិក)
+// ==========================================
+export const StaffGenderSchema = z.enum(['male', 'female', 'other']);
+export type StaffGender = z.infer<typeof StaffGenderSchema>;
+
+export const StaffStatusSchema = z.enum(['active', 'inactive']);
+export type StaffStatus = z.infer<typeof StaffStatusSchema>;
+
+export const StaffSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'ឈ្មោះបុគ្គលិកត្រូវតែមាន'),
+  gender: StaffGenderSchema.default('male'),
+  role: z.string().min(1, 'តួនាទីត្រូវតែមាន').default('waiter'),
+  telegram: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  status: StaffStatusSchema.default('active'),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  updatedAt: z.union([z.string(), z.date()]).optional(),
+});
+export type Staff = z.infer<typeof StaffSchema>;
+
+export const CreateStaffInputSchema = z.object({
+  name: z.string().min(1, 'សូមបញ្ចូលឈ្មោះបុគ្គលិក'),
+  gender: StaffGenderSchema.default('male'),
+  role: z.string().min(1, 'សូមជ្រើសរើសតួនាទី').default('waiter'),
+  telegram: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  status: StaffStatusSchema.default('active'),
+});
+export type CreateStaffInput = z.infer<typeof CreateStaffInputSchema>;
+
+export const UpdateStaffInputSchema = CreateStaffInputSchema.partial();
+export type UpdateStaffInput = z.infer<typeof UpdateStaffInputSchema>;
+
+// ==========================================
+// Payment Methods Schema & Types (ការគ្រប់គ្រងវិធីសាស្ត្រទូទាត់)
+// ==========================================
+export const PaymentMethodConfigSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'ឈ្មោះវិធីសាស្ត្រទូទាត់ត្រូវតែមាន'),
+  code: z.string().min(1, 'កូដត្រូវតែមាន'), // e.g. 'cash', 'aba', 'acleda', 'wing', 'card'
+  accountName: z.string().nullable().optional(),
+  accountNumber: z.string().nullable().optional(),
+  qrImageUrl: z.string().nullable().optional(),
+  isEnabled: z.boolean().default(true),
+  sortOrder: z.number().default(0),
+  description: z.string().nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]).optional(),
+  updatedAt: z.union([z.string(), z.date()]).optional(),
+});
+export type PaymentMethodConfig = z.infer<typeof PaymentMethodConfigSchema>;
+
+export const CreatePaymentMethodInputSchema = z.object({
+  name: z.string().min(1, 'សូមបញ្ចូលឈ្មោះវិធីសាស្ត្រទូទាត់ (ឧទាហរណ៍៖ ABA Bank)'),
+  code: z.string().min(1, 'សូមបញ្ចូលកូដសម្គាល់ (ឧទាហរណ៍៖ aba)'),
+  accountName: z.string().nullable().optional(),
+  accountNumber: z.string().nullable().optional(),
+  qrImageUrl: z.string().nullable().optional(),
+  isEnabled: z.boolean().default(true),
+  sortOrder: z.number().default(0),
+  description: z.string().nullable().optional(),
+});
+export type CreatePaymentMethodInput = z.infer<typeof CreatePaymentMethodInputSchema>;
+
+export const UpdatePaymentMethodInputSchema = CreatePaymentMethodInputSchema.partial();
+export type UpdatePaymentMethodInput = z.infer<typeof UpdatePaymentMethodInputSchema>;
+
+
 

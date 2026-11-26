@@ -327,10 +327,12 @@ function setDatePreset(type: 'today' | 'yesterday') {
                           ? 'bg-rose-50 dark:bg-rose-950 text-rose-600'
                           : ord.paymentMethod === 'card'
                           ? 'bg-blue-50 dark:bg-blue-950 text-blue-600'
+                          : ord.paymentMethod === 'mixed'
+                          ? 'bg-amber-50 dark:bg-amber-950 text-amber-600'
                           : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600',
                       ]"
                     >
-                      {{ ord.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (ord.paymentMethod === 'khqr' ? 'KHQR' : 'កាត') }}
+                      {{ ord.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (ord.paymentMethod === 'khqr' ? 'KHQR' : (ord.paymentMethod === 'mixed' ? 'បង់ចម្រុះ' : 'កាត')) }}
                     </span>
                   </td>
                   <td class="py-2.5 px-3">

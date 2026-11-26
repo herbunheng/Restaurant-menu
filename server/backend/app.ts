@@ -16,6 +16,8 @@ import { pushRouter } from './routes/push';
 import { categoriesRouter } from './routes/categories';
 import { menuRouter } from './routes/menu';
 import { ordersRouter } from './routes/orders';
+import { staffRouter } from './routes/staff';
+import { paymentMethodsRouter } from './routes/payment_methods';
 import type { AppEnv } from './types';
 
 export function createApp() {
@@ -65,6 +67,8 @@ export function createApp() {
   app.route('/api/categories', categoriesRouter);
   app.route('/api/menu', menuRouter);
   app.route('/api/orders', ordersRouter);
+  app.route('/api/staff', staffRouter);
+  app.route('/api/payment-methods', paymentMethodsRouter);
 
   // Root Endpoint
   app.get('/', (c) => {

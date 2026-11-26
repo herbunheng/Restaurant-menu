@@ -146,6 +146,9 @@ export async function createOrderController(c: Context<AppEnv>) {
     paymentMethod = 'cash',
     paymentStatus = 'paid',
     cashierName = 'Cashier',
+    waiterName = null,
+    billedBy = null,
+    billedAt = null,
     note = '',
   } = parsed.data;
 
@@ -169,6 +172,9 @@ export async function createOrderController(c: Context<AppEnv>) {
     paymentMethod,
     paymentStatus,
     cashierName,
+    waiterName: waiterName || null,
+    billedBy: billedBy || null,
+    billedAt: billedAt ? new Date(billedAt) : null,
     note: note || null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -192,6 +198,9 @@ export async function createOrderController(c: Context<AppEnv>) {
       paymentMethod: newOrder.paymentMethod,
       paymentStatus: newOrder.paymentStatus,
       cashierName: newOrder.cashierName,
+      waiterName: newOrder.waiterName,
+      billedBy: newOrder.billedBy,
+      billedAt: newOrder.billedAt as Date | null,
       note: newOrder.note,
       createdAt: newOrder.createdAt as Date,
       updatedAt: newOrder.updatedAt as Date,
@@ -262,6 +271,7 @@ export async function updateOrderController(c: Context<AppEnv>) {
       subtotal,
       discount,
       totalAmount,
+      billedAt: updates.billedAt ? new Date(updates.billedAt) : updates.billedAt === null ? null : current.billedAt,
       updatedAt: new Date(),
     };
 
@@ -297,6 +307,9 @@ export async function updateOrderController(c: Context<AppEnv>) {
       totalAmount,
       updatedAt: new Date(),
     };
+    if (updates.billedAt !== undefined) {
+      updatePayload.billedAt = updates.billedAt ? new Date(updates.billedAt) : null;
+    }
 
     await db.update(orders).set(updatePayload).where(eq(orders.id, id));
     const finalOrder = await db.select().from(orders).where(eq(orders.id, id)).get();
@@ -348,6 +361,9 @@ export async function splitPayOrderController(c: Context<AppEnv>) {
       paymentMethod,
       paymentStatus: 'paid',
       cashierName,
+      waiterName: original.waiterName ?? null,
+      billedBy: original.billedBy ?? null,
+      billedAt: original.billedAt ? new Date(original.billedAt) : null,
       note: note || `Split payment from Order #${original.orderNumber}`,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -415,6 +431,9 @@ export async function splitPayOrderController(c: Context<AppEnv>) {
       paymentMethod,
       paymentStatus: 'paid',
       cashierName,
+      waiterName: original.waiterName ?? null,
+      billedBy: original.billedBy ?? null,
+      billedAt: original.billedAt ? new Date(original.billedAt) : null,
       note: note || `Split payment from Order #${original.orderNumber}`,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -431,6 +450,9 @@ export async function splitPayOrderController(c: Context<AppEnv>) {
       paymentMethod: splitPaidOrder.paymentMethod,
       paymentStatus: splitPaidOrder.paymentStatus,
       cashierName: splitPaidOrder.cashierName,
+      waiterName: splitPaidOrder.waiterName,
+      billedBy: splitPaidOrder.billedBy,
+      billedAt: splitPaidOrder.billedAt as Date | null,
       note: splitPaidOrder.note,
       createdAt: splitPaidOrder.createdAt as Date,
       updatedAt: splitPaidOrder.updatedAt as Date,
@@ -529,6 +551,14 @@ export async function getDailyReportController(c: Context<AppEnv>) {
       if (ord.paymentMethod === 'cash') cashUSD += amt;
       else if (ord.paymentMethod === 'khqr') khqrUSD += amt;
       else if (ord.paymentMethod === 'card') cardUSD += amt;
+      else if (ord.paymentMethod === 'mixed') {
+        const cashMatch = ord.note?.match(/សាច់ប្រាក់\s*\$([0-9.]+)/i);
+        const onlineMatch = ord.note?.match(/KHQR\s*\$([0-9.]+)/i);
+        const cAmt = cashMatch ? Number(cashMatch[1]) : 0;
+        const oAmt = onlineMatch ? Number(onlineMatch[1]) : Math.max(0, amt - cAmt);
+        cashUSD += cAmt;
+        khqrUSD += oAmt;
+      }
 
       // Aggregate Items
       if (Array.isArray(ord.items)) {

@@ -532,7 +532,7 @@ function formatRiel(usd: number): string {
       </div>
 
       <!-- Items Grid View -->
-      <div v-if="filteredItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div v-if="filteredItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div v-for="item in filteredItems" :key="item.id"
           class="group rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
           <!-- Image Header with Availability Tag -->
@@ -808,35 +808,27 @@ function formatRiel(usd: number): string {
               <!-- Quick Presets -->
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ:</span>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('sizes')"
-                >
+                  @click="applyPreset('sizes')">
                   <UIcon name="i-heroicons-scale" class="w-3.5 h-3.5 text-primary-500" />
                   <span>🍽️ តូច / កណ្តាល / ធំ</span>
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('drinks')"
-                >
+                  @click="applyPreset('drinks')">
                   <UIcon name="i-heroicons-beaker" class="w-3.5 h-3.5 text-primary-500" />
                   <span>☕ ក្តៅ / ត្រជាក់ / ក្រឡុក</span>
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('beer_units')"
-                >
+                  @click="applyPreset('beer_units')">
                   <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-amber-500" />
                   <span>🍺 កំប៉ុង / ដប / កេស</span>
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('beer_draught')"
-                >
+                  @click="applyPreset('beer_draught')">
                   <UIcon name="i-heroicons-trophy" class="w-3.5 h-3.5 text-amber-500" />
                   <span>🍻 កែវ / ថូ / ធុង Tower</span>
                 </button>
@@ -844,47 +836,32 @@ function formatRiel(usd: number): string {
 
               <!-- Variant Rows -->
               <div class="space-y-2">
-                <div
-                  v-for="(variant, vIdx) in itemForm.variants"
-                  :key="vIdx"
-                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs"
-                >
+                <div v-for="(variant, vIdx) in itemForm.variants" :key="vIdx"
+                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs">
                   <div class="flex-1">
-                    <input
-                      v-model="variant.label"
-                      type="text"
+                    <input v-model="variant.label" type="text"
                       placeholder="e.g. 1 កំប៉ុង (Can), 1 ដប (Bottle), 1 កេស (Case)..."
                       class="w-full px-3 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-medium"
-                      required
-                    />
+                      required />
                   </div>
 
                   <div class="w-36 flex flex-col items-end">
                     <div class="w-full relative">
                       <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">$</span>
-                      <input
-                        v-model.number="variant.price"
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        placeholder="0.00"
+                      <input v-model.number="variant.price" type="number" step="0.05" min="0" placeholder="0.00"
                         class="w-full pl-6 pr-2 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400 font-mono text-right"
-                        required
-                      />
+                        required />
                     </div>
                     <span class="text-[10px] text-gray-400 font-mono pr-1 mt-0.5">
                       ≈ {{ formatRiel(variant.price || 0) }} ៛
                     </span>
                   </div>
 
-                  <button
-                    type="button"
+                  <button type="button"
                     class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                    title="Remove variant"
-                    :disabled="itemForm.variants.length <= 1"
+                    title="Remove variant" :disabled="itemForm.variants.length <= 1"
                     :class="{ 'opacity-30 cursor-not-allowed': itemForm.variants.length <= 1 }"
-                    @click="removeVariantOption(vIdx)"
-                  >
+                    @click="removeVariantOption(vIdx)">
                     <UIcon name="i-heroicons-trash" class="w-4 h-4" />
                   </button>
                 </div>

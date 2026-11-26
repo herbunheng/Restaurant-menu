@@ -5,3 +5,5 @@ export * from './audit_logs';
 export * from './push_subscriptions';
 export * from './menu';
 export * from './orders';
+export * from './staff';
+export * from './payment_methods';

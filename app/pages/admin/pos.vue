@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
-import type { MenuItem, Category, Order, OrderItem } from '@restaurant-menu/shared';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import type { MenuItem, Category, Order, OrderItem, Staff, PaymentMethodConfig } from '@restaurant-menu/shared';
 
 definePageMeta({
   layout: 'admin',
@@ -25,6 +25,28 @@ const { data: activeOrdersData, refresh: refreshActiveOrders } = await useApiDat
   'pos-active-orders',
   '/api/orders/active'
 );
+
+// 3. Fetch Staff Members for Waiter & Bill Collector
+const { data: dbStaffData } = await useApiData<Staff[]>(
+  'pos-staff-list',
+  '/api/staff'
+);
+
+// 4. Fetch Active Payment Methods (ABA, ACLEDA, Cash, etc.)
+const { data: dbPaymentMethodsData } = await useApiData<PaymentMethodConfig[]>(
+  'pos-payment-methods',
+  '/api/payment-methods/active'
+);
+
+const activePaymentMethods = computed(() => {
+  const methods = dbPaymentMethodsData.value || [];
+  if (methods.length > 0) return methods;
+  return [
+    { id: 'pay_cash', name: 'សាច់ប្រាក់ (Cash)', code: 'cash', isEnabled: true, sortOrder: 1 },
+    { id: 'pay_aba', name: 'ABA Bank', code: 'aba', isEnabled: true, sortOrder: 2 },
+    { id: 'pay_acleda', name: 'ACLEDA Bank', code: 'acleda', isEnabled: true, sortOrder: 3 },
+  ] as PaymentMethodConfig[];
+});
 
 const menuList = computed(() => (menuData.value || []).filter((i) => i.isAvailable));
 const categoriesList = computed(() => categoriesData.value || []);
@@ -97,6 +119,50 @@ const paymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
 const orderNote = ref('');
 const isSubmitting = ref(false);
 
+// Staff Tracking State (អ្នកកត់ Order និងអ្នកកាន់បុងទៅគិតលុយភ្ញៀវ)
+const fallbackStaffList = ['សុខា', 'ដារ៉ា', 'ចាន់ណា', 'ពិសិដ្ឋ', 'កញ្ញា'];
+const presetStaffList = computed(() => {
+  const activeNames = (dbStaffData.value || [])
+    .filter((s) => s.status === 'active')
+    .map((s) => s.name);
+  return activeNames.length > 0 ? activeNames : fallbackStaffList;
+});
+const selectedWaiterOption = ref('');
+const customWaiterInput = ref('');
+const activeWaiterName = computed(() => {
+  if (selectedWaiterOption.value === 'custom') {
+    return customWaiterInput.value.trim();
+  }
+  return selectedWaiterOption.value;
+});
+
+// Bill Collector Modal & Selection (អ្នកកាន់បុងទៅគិតលុយ)
+const isBilledByModalOpen = ref(false);
+const selectedBilledBy = ref('');
+const customBilledByInput = ref('');
+const activeBilledByName = computed(() => customBilledByInput.value.trim() || selectedBilledBy.value);
+
+// Live Timer for Billed Orders Tracking
+const nowTimestamp = ref(Date.now());
+let timerInterval: any = null;
+
+onMounted(() => {
+  timerInterval = setInterval(() => {
+    nowTimestamp.value = Date.now();
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (timerInterval) clearInterval(timerInterval);
+});
+
+function getElapsedMinutes(timestamp: string | Date | undefined | null): number {
+  if (!timestamp) return 0;
+  const time = new Date(timestamp).getTime();
+  if (isNaN(time)) return 0;
+  return Math.max(0, Math.floor((nowTimestamp.value - time) / 60000));
+}
+
 // Synchronize cart when table selection changes
 function syncTableOrder() {
   const existingOrder = currentActiveOrder.value;
@@ -106,11 +172,26 @@ function syncTableOrder() {
     discount.value = existingOrder.discount || 0;
     orderNote.value = existingOrder.note || '';
     paymentMethod.value = existingOrder.paymentMethod || 'cash';
+
+    // Synchronize Waiter Name
+    const w = existingOrder.waiterName || '';
+    if (!w) {
+      selectedWaiterOption.value = '';
+      customWaiterInput.value = '';
+    } else if (presetStaffList.value.includes(w)) {
+      selectedWaiterOption.value = w;
+      customWaiterInput.value = '';
+    } else {
+      selectedWaiterOption.value = 'custom';
+      customWaiterInput.value = w;
+    }
   } else {
     // Available Table: Fresh empty cart for new customer
     cart.value = [];
     discount.value = 0;
     orderNote.value = '';
+    selectedWaiterOption.value = '';
+    customWaiterInput.value = '';
   }
 }
 
@@ -135,8 +216,80 @@ const isPrintingPreBill = ref(false);
 
 // Payment Checkout Modal State (ជ្រើសរើសវិធីសាស្ត្រទូទាត់ពេលចុចគិតលុយ)
 const isPaymentModalOpen = ref(false);
-const checkoutPaymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
+const checkoutPaymentMethod = ref<string>('cash');
 const checkoutReceivedCash = ref<number | ''>('');
+
+// Mixed Payment State (បង់ចម្រុះ៖ សាច់ប្រាក់ + Pay Online)
+const mixedCashUSD = ref<number | ''>('');
+const mixedOnlineUSD = ref<number | ''>('');
+const mixedOnlineBank = ref<string>('aba');
+const mixedNoteInput = ref<string>('');
+
+const onlinePaymentMethods = computed(() => {
+  return activePaymentMethods.value.filter((m) => m.code !== 'cash' && m.code !== 'card');
+});
+
+const currentSelectedMixedOnlineObj = computed(() => {
+  return (
+    activePaymentMethods.value.find((m) => m.code === mixedOnlineBank.value) ||
+    onlinePaymentMethods.value[0] ||
+    null
+  );
+});
+
+function onMixedCashInput() {
+  const cash = Number(mixedCashUSD.value) || 0;
+  if (cash <= totalAmount.value) {
+    mixedOnlineUSD.value = Number((totalAmount.value - cash).toFixed(2));
+  } else {
+    mixedOnlineUSD.value = 0;
+  }
+}
+
+function onMixedOnlineInput() {
+  const online = Number(mixedOnlineUSD.value) || 0;
+  if (online <= totalAmount.value) {
+    mixedCashUSD.value = Number((totalAmount.value - online).toFixed(2));
+  } else {
+    mixedCashUSD.value = 0;
+  }
+}
+
+const mixedTotalPaid = computed(() => {
+  return Number(((Number(mixedCashUSD.value) || 0) + (Number(mixedOnlineUSD.value) || 0)).toFixed(2));
+});
+
+const mixedRemainingUSD = computed(() => {
+  const diff = totalAmount.value - mixedTotalPaid.value;
+  return diff > 0 ? Number(diff.toFixed(2)) : 0;
+});
+
+const mixedChangeUSD = computed(() => {
+  const cash = Number(mixedCashUSD.value) || 0;
+  const online = Number(mixedOnlineUSD.value) || 0;
+  if (cash + online > totalAmount.value && cash > 0) {
+    return Number((cash + online - totalAmount.value).toFixed(2));
+  }
+  return 0;
+});
+
+const currentSelectedPaymentMethodObj = computed(() => {
+  return activePaymentMethods.value.find((m) => m.code === checkoutPaymentMethod.value) || null;
+});
+
+function getPaymentMethodLabel(code: string | undefined | null): string {
+  if (!code) return 'សាច់ប្រាក់';
+  if (code === 'mixed') return 'បង់ចម្រុះ (សាច់ប្រាក់ + Pay Online)';
+  const found = activePaymentMethods.value.find((m) => m.code === code);
+  if (found) return found.name;
+  if (code === 'cash') return 'សាច់ប្រាក់ (Cash)';
+  if (code === 'aba') return 'ABA Bank';
+  if (code === 'acleda') return 'ACLEDA Bank';
+  if (code === 'wing') return 'Wing Bank';
+  if (code === 'card') return 'កាតធនាគារ (Card)';
+  if (code === 'khqr') return 'KHQR / Bakong';
+  return code;
+}
 
 const checkoutChangeUSD = computed(() => {
   if (checkoutPaymentMethod.value !== 'cash') return 0;
@@ -145,18 +298,6 @@ const checkoutChangeUSD = computed(() => {
     return Number((received - totalAmount.value).toFixed(2));
   }
   return 0;
-});
-
-const quickCashSuggestions = computed(() => {
-  const tot = totalAmount.value;
-  const set = new Set<number>();
-  const standardDenominations = [5, 10, 20, 50, 100];
-  for (const bill of standardDenominations) {
-    if (bill > tot) {
-      set.add(bill);
-    }
-  }
-  return Array.from(set).slice(0, 4);
 });
 
 function openPaymentModal() {
@@ -169,8 +310,18 @@ function openPaymentModal() {
     return;
   }
 
-  checkoutPaymentMethod.value = 'cash';
+  // Default to cash if active, or the first active payment method
+  const hasCash = activePaymentMethods.value.some((m) => m.code === 'cash');
+  checkoutPaymentMethod.value = hasCash ? 'cash' : (activePaymentMethods.value[0]?.code || 'cash');
   checkoutReceivedCash.value = totalAmount.value;
+
+  // Initialize mixed payment defaults
+  const halfCash = Number((totalAmount.value / 2).toFixed(2));
+  mixedCashUSD.value = halfCash;
+  mixedOnlineUSD.value = Number((totalAmount.value - halfCash).toFixed(2));
+  mixedOnlineBank.value = onlinePaymentMethods.value[0]?.code || 'aba';
+  mixedNoteInput.value = '';
+
   isPaymentModalOpen.value = true;
 }
 
@@ -571,6 +722,7 @@ async function executeSavePendingOrder() {
         body: {
           items: cart.value,
           discount: Number(discount.value) || 0,
+          waiterName: activeWaiterName.value || currentActiveOrder.value.waiterName || '',
           note: orderNote.value.trim() || '',
         },
       });
@@ -591,13 +743,14 @@ async function executeSavePendingOrder() {
           paymentMethod: paymentMethod.value,
           paymentStatus: 'pending',
           cashierName: 'Cashier 01',
+          waiterName: activeWaiterName.value || '',
           note: orderNote.value.trim() || '',
         },
       });
 
       toast.add({
         title: 'បានបើកតុ & កត់ Order!',
-        description: `បានកត់ត្រា Order ដំបូងសម្រាប់ ${table}`,
+        description: `បានកត់ត្រា Order ដំបូងសម្រាប់ ${table}${activeWaiterName.value ? ` (កត់ដោយ៖ ${activeWaiterName.value})` : ''}`,
         color: 'success',
       });
     }
@@ -615,7 +768,7 @@ async function executeSavePendingOrder() {
 }
 
 // 2. ACTION: PRINT PRE-BILL (ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវមើល - មិនទាន់គិតលុយ)
-async function handlePrintPreBill() {
+function handlePrintPreBill() {
   if (!isCurrentTableOccupied.value || !currentActiveOrder.value) {
     toast.add({
       title: 'មិនទាន់មានតុ',
@@ -634,16 +787,44 @@ async function handlePrintPreBill() {
     return;
   }
 
+  // Pre-fill bill collector: existing billedBy or order waiter or first preset staff
+  const initialCollector = currentActiveOrder.value.billedBy || activeWaiterName.value || presetStaffList.value[0] || '';
+  if (presetStaffList.value.includes(initialCollector)) {
+    selectedBilledBy.value = initialCollector;
+    customBilledByInput.value = '';
+  } else {
+    selectedBilledBy.value = '';
+    customBilledByInput.value = initialCollector;
+  }
+
+  isBilledByModalOpen.value = true;
+}
+
+// Confirm Collector & Execute Pre-Bill
+async function confirmBilledByAndPrint() {
+  const staff = activeBilledByName.value;
+  if (!staff) {
+    toast.add({
+      title: 'សូមបញ្ជាក់ឈ្មោះអ្នកកាន់បុង',
+      description: 'សូមជ្រើសរើស ឬវាយបញ្ចូលឈ្មោះបុគ្គលិកដែលកាន់បុងទៅជួបភ្ញៀវ',
+      color: 'warning',
+    });
+    return;
+  }
+
   isPrintingPreBill.value = true;
   const table = currentSelectedTableName.value;
 
   try {
-    const res: any = await $api(`/api/orders/${currentActiveOrder.value.id}`, {
+    const res: any = await $api(`/api/orders/${currentActiveOrder.value!.id}`, {
       method: 'PUT',
       body: {
         items: cart.value,
         discount: Number(discount.value) || 0,
         paymentStatus: 'billed',
+        waiterName: activeWaiterName.value || currentActiveOrder.value!.waiterName || '',
+        billedBy: staff,
+        billedAt: new Date().toISOString(),
         note: orderNote.value.trim() || '',
       },
     });
@@ -651,13 +832,14 @@ async function handlePrintPreBill() {
     const saved = res?.data || res;
     lastSavedOrder.value = saved;
     receiptMode.value = 'pre_bill';
+    isBilledByModalOpen.value = false;
     isReceiptModalOpen.value = true;
 
     await refreshActiveOrders();
 
     toast.add({
       title: 'បានចេញបុងបណ្ដោះអាសន្ន!',
-      description: `តុ ${table} បានប្តូរស្ថានភាពទៅ "សុំមើលបុង" (Pre-Billed)`,
+      description: `តុ ${table} បានប្តូរទៅ "សុំមើលបុង" (កាន់ដោយ៖ ${staff})`,
       color: 'success',
     });
   } catch (err: any) {
@@ -682,8 +864,24 @@ async function executeCheckout() {
     return;
   }
 
+  if (checkoutPaymentMethod.value === 'mixed' && mixedTotalPaid.value < totalAmount.value) {
+    toast.add({
+      title: 'ទឹកប្រាក់មិនទាន់គ្រប់ចំនួន',
+      description: `ទឹកប្រាក់បង់ចម្រុះខ្វះ $${mixedRemainingUSD.value.toFixed(2)} ដើម្បីគ្រប់ចំនួន`,
+      color: 'warning',
+    });
+    return;
+  }
+
   isSubmitting.value = true;
   const table = currentSelectedTableName.value;
+
+  let finalNote = orderNote.value.trim();
+  if (checkoutPaymentMethod.value === 'mixed') {
+    const bankName = currentSelectedMixedOnlineObj.value?.name || 'KHQR';
+    const mixedDetail = `បង់ចម្រុះ៖ សាច់ប្រាក់ $${Number(mixedCashUSD.value).toFixed(2)} + ${bankName} $${Number(mixedOnlineUSD.value).toFixed(2)}${mixedNoteInput.value.trim() ? ` (${mixedNoteInput.value.trim()})` : ''}`;
+    finalNote = finalNote ? `${finalNote} • ${mixedDetail}` : mixedDetail;
+  }
 
   try {
     let saved: Order;
@@ -697,7 +895,8 @@ async function executeCheckout() {
           discount: Number(discount.value) || 0,
           paymentMethod: checkoutPaymentMethod.value,
           paymentStatus: 'paid',
-          note: orderNote.value.trim() || '',
+          waiterName: activeWaiterName.value || currentActiveOrder.value.waiterName || '',
+          note: finalNote,
         },
       });
       saved = res?.data || res;
@@ -712,7 +911,8 @@ async function executeCheckout() {
           paymentMethod: checkoutPaymentMethod.value,
           paymentStatus: 'paid',
           cashierName: 'Cashier 01',
-          note: orderNote.value.trim() || '',
+          waiterName: activeWaiterName.value || '',
+          note: finalNote,
         },
       });
       saved = res?.data || res;
@@ -786,27 +986,40 @@ function handlePrint() {
               :class="[
                 currentSelectedTableName === t && !customTableInput
                   ? activeTablesMap.get(t)?.paymentStatus === 'billed'
-                    ? 'border-purple-600 bg-purple-600 text-white shadow-xs scale-[1.02]'
+                    ? getElapsedMinutes(activeTablesMap.get(t)?.billedAt) >= 10
+                      ? 'border-rose-600 bg-rose-600 text-white shadow-xs scale-[1.02]'
+                      : 'border-purple-600 bg-purple-600 text-white shadow-xs scale-[1.02]'
                     : activeTablesMap.get(t)?.paymentStatus === 'pending'
                       ? 'border-amber-600 bg-amber-600 text-white shadow-xs scale-[1.02]'
                       : 'border-primary-600 bg-primary-600 text-white shadow-xs scale-[1.02]'
                   : activeTablesMap.get(t)?.paymentStatus === 'billed'
-                    ? 'border-purple-300 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 hover:bg-purple-100'
+                    ? getElapsedMinutes(activeTablesMap.get(t)?.billedAt) >= 10
+                      ? 'border-rose-400 dark:border-rose-800 bg-rose-100 dark:bg-rose-950/60 text-rose-950 dark:text-rose-200 animate-pulse'
+                      : 'border-purple-300 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 hover:bg-purple-100'
                     : activeTablesMap.get(t)?.paymentStatus === 'pending'
                       ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100'
                       : 'border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100',
               ]" @click="handleSelectTable(t)">
               <span>{{ t }}</span>
               <!-- Occupied / Billed indicator -->
-              <span v-if="activeTablesMap.has(t)" class="px-1.5 py-0.2 rounded-md text-[9px] font-black" :class="[
-                currentSelectedTableName === t
-                  ? 'bg-black/30 text-white'
-                  : activeTablesMap.get(t)?.paymentStatus === 'billed'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-amber-500 text-white',
-              ]">
-                {{ activeTablesMap.get(t)?.paymentStatus === 'billed' ? 'មើលបុង' :
-                  `${activeTablesMap.get(t)?.items.length} មុខ` }}
+              <span v-if="activeTablesMap.has(t)"
+                class="px-1.5 py-0.2 rounded-md text-[9px] font-black flex items-center gap-0.5" :class="[
+                  currentSelectedTableName === t
+                    ? 'bg-black/30 text-white'
+                    : activeTablesMap.get(t)?.paymentStatus === 'billed'
+                      ? getElapsedMinutes(activeTablesMap.get(t)?.billedAt) >= 10
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-purple-600 text-white'
+                      : 'bg-amber-500 text-white',
+                ]">
+                <template v-if="activeTablesMap.get(t)?.paymentStatus === 'billed'">
+                  <span v-if="getElapsedMinutes(activeTablesMap.get(t)?.billedAt) >= 10">⚠️</span>
+                  <span>{{ activeTablesMap.get(t)?.billedBy ? `${activeTablesMap.get(t)?.billedBy}
+                    (${getElapsedMinutes(activeTablesMap.get(t)?.billedAt)}ន)` : 'មើលបុង' }}</span>
+                </template>
+                <template v-else>
+                  {{ `${activeTablesMap.get(t)?.items.length} មុខ` }}
+                </template>
               </span>
             </button>
 
@@ -925,33 +1138,18 @@ function handlePrint() {
           </div>
 
           <div>
-            <div class="flex items-center gap-1.5">
-              <h2 class="text-sm font-extrabold text-gray-900 dark:text-white leading-tight">
-                {{ currentSelectedTableName }}
-              </h2>
-              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase" :class="[
-                !isCurrentTableOccupied
-                  ? 'bg-emerald-600 text-white'
-                  : currentActiveOrder?.paymentStatus === 'billed'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-amber-500 text-white',
-              ]">
-                {{
-                  !isCurrentTableOccupied
-                    ? 'តុទំនេរ'
-                    : currentActiveOrder?.paymentStatus === 'billed'
-                      ? '🟣 សុំមើលបុង'
-                      : '🟡 កំពុងញ៉ាំ'
-                }}
-              </span>
-            </div>
+
 
             <p class="text-[11px] text-gray-500 font-mono mt-0.5">
               <template v-if="isCurrentTableOccupied">
                 កុម្ម៉ង់លេខ #{{ currentActiveOrder?.orderNumber }} • {{ cart.length }} មុខ
+                <span v-if="currentActiveOrder?.waiterName"
+                  class="text-primary-600 dark:text-primary-400 font-bold ml-1">
+                  (កត់៖ {{ currentActiveOrder.waiterName }})
+                </span>
                 <span v-if="currentActiveOrder?.paymentStatus === 'billed'"
                   class="text-purple-600 dark:text-purple-400 font-bold ml-1">
-                  (រង់ចាំលុយ)
+                  • រង់ចាំលុយ
                 </span>
               </template>
               <template v-else>
@@ -989,29 +1187,81 @@ function handlePrint() {
         </div>
       </div>
 
+      <!-- Fraud Protection Alert Banner: Billed Table Status & Delay Warning -->
+      <div v-if="isCurrentTableOccupied && currentActiveOrder?.paymentStatus === 'billed'"
+        class="px-3.5 py-2.5 border-b text-xs flex items-center justify-between gap-2 transition-all"
+        :class="getElapsedMinutes(currentActiveOrder?.billedAt) >= 10
+          ? 'bg-rose-100 dark:bg-rose-950/80 border-rose-300 dark:border-rose-800 text-rose-950 dark:text-rose-100'
+          : 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-200'">
+        <div class="flex items-center gap-2 min-w-0">
+          <UIcon
+            :name="getElapsedMinutes(currentActiveOrder?.billedAt) >= 10 ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-document-text'"
+            class="w-4 h-4 shrink-0"
+            :class="getElapsedMinutes(currentActiveOrder?.billedAt) >= 10 ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-purple-600 dark:text-purple-400'" />
+          <div class="min-w-0">
+            <p class="truncate font-bold">
+              អ្នកកាន់បុង៖ <span class="underline decoration-purple-400 font-black">{{ currentActiveOrder?.billedBy ||
+                'មិនទាន់បញ្ជាក់' }}</span>
+            </p>
+            <p v-if="getElapsedMinutes(currentActiveOrder?.billedAt) >= 10"
+              class="text-[10px] text-rose-700 dark:text-rose-300 font-bold leading-tight">
+              ⚠️ យូរជាង ១០ នាទីហើយ មិនទាន់ឃើញលុយមក Cashier!
+            </p>
+          </div>
+        </div>
+
+        <span class="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 shadow-2xs"
+          :class="getElapsedMinutes(currentActiveOrder?.billedAt) >= 10 ? 'bg-rose-600 text-white animate-pulse' : 'bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200'">
+          {{ getElapsedMinutes(currentActiveOrder?.billedAt) }} នាទីមុន
+        </span>
+      </div>
+
+      <!-- Waiter Selector (អ្នកកត់ Order) using Select Dropdown -->
+      <div
+        class="px-3.5 py-2 bg-gray-50/90 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2 text-xs">
+        <label for="pos-waiter-select"
+          class="flex items-center gap-1 shrink-0 text-gray-700 dark:text-gray-300 font-bold">
+          <UIcon name="i-heroicons-user" class="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
+          <span>អ្នកកត់ Order៖</span>
+        </label>
+
+        <div class="flex items-center gap-1.5 flex-1 justify-end min-w-0">
+          <select id="pos-waiter-select" v-model="selectedWaiterOption"
+            class="py-1 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 text-gray-800 dark:text-gray-200 cursor-pointer shadow-2xs transition-all w-full max-w-[160px]">
+            <option value="">-- ជ្រើសរើសអ្នកកត់ --</option>
+            <option v-for="staff in presetStaffList" :key="staff" :value="staff">
+              {{ staff }}
+            </option>
+            <option value="custom">✍️ វាយឈ្មោះផ្សេង...</option>
+          </select>
+
+          <!-- Input for Custom Name when 'custom' is selected -->
+          <input v-if="selectedWaiterOption === 'custom'" v-model="customWaiterInput" type="text"
+            placeholder="វាយឈ្មោះ..." autofocus
+            class="w-24 px-2 py-1 text-xs rounded-xl bg-white dark:bg-gray-900 border border-primary-500 dark:border-primary-500 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-gray-800 dark:text-gray-200 animate-in fade-in shrink-0" />
+        </div>
+      </div>
+
       <!-- Order Items List (Scrollable) -->
       <div class="flex-1 p-3 overflow-y-auto space-y-2 bg-gray-50/50 dark:bg-gray-950/30">
         <div v-if="cart.length > 0" class="space-y-2.5">
-          <div
-            v-for="(item, idx) in cart"
-            :key="idx"
-            class="p-3 rounded-2xl bg-white dark:bg-gray-800/90 border border-gray-200/90 dark:border-gray-700/80 hover:border-primary-400 dark:hover:border-primary-500/70 shadow-2xs hover:shadow-xs transition-all space-y-2.5 group"
-          >
+          <div v-for="(item, idx) in cart" :key="idx"
+            class="p-3 rounded-2xl bg-white dark:bg-gray-800/90 border border-gray-200/90 dark:border-gray-700/80 hover:border-primary-400 dark:hover:border-primary-500/70 shadow-2xs hover:shadow-xs transition-all space-y-2.5 group">
             <!-- Top Row: Thumbnail + Item Info + Delete Button -->
             <div class="flex items-start gap-2.5">
               <!-- Dish Thumbnail Image or Fallback Badge -->
-              <div class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700/80 overflow-hidden shrink-0 border border-gray-200/70 dark:border-gray-700 flex items-center justify-center relative shadow-2xs">
-                <img
-                  v-if="menuMap.get(item.menuItemId)?.imageUrl"
-                  :src="menuMap.get(item.menuItemId)?.imageUrl"
+              <div
+                class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700/80 overflow-hidden shrink-0 border border-gray-200/70 dark:border-gray-700 flex items-center justify-center relative shadow-2xs">
+                <img v-if="menuMap.get(item.menuItemId)?.imageUrl" :src="menuMap.get(item.menuItemId)?.imageUrl"
                   :alt="item.name"
-                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div v-else class="w-full h-full flex items-center justify-center bg-linear-to-br from-primary-500/10 to-primary-600/20 text-primary-600 dark:text-primary-400 font-black text-xs">
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                <div v-else
+                  class="w-full h-full flex items-center justify-center bg-linear-to-br from-primary-500/10 to-primary-600/20 text-primary-600 dark:text-primary-400 font-black text-xs">
                   {{ item.name.slice(0, 2) }}
                 </div>
                 <!-- Index badge -->
-                <span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded-md bg-black/60 backdrop-blur-xs text-[8px] font-black text-white">
+                <span
+                  class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded-md bg-black/60 backdrop-blur-xs text-[8px] font-black text-white">
                   #{{ idx + 1 }}
                 </span>
               </div>
@@ -1019,26 +1269,22 @@ function handlePrint() {
               <!-- Item Details -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between gap-1">
-                  <h4 class="text-xs font-black text-gray-900 dark:text-white truncate leading-tight group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                  <h4
+                    class="text-xs font-black text-gray-900 dark:text-white truncate leading-tight group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
                     {{ item.name }}
                   </h4>
                   <!-- Direct Remove Button -->
-                  <button
-                    type="button"
+                  <button type="button"
                     class="p-1 -mr-1 -mt-1 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
-                    title="ដកមុខម្ហូបនេះចេញ"
-                    @click="handleRemoveItem(idx)"
-                  >
+                    title="ដកមុខម្ហូបនេះចេញ" @click="handleRemoveItem(idx)">
                     <UIcon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 <!-- Variant Badge & Unit Price -->
                 <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                  <span
-                    v-if="item.variantLabel"
-                    class="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/60 dark:border-primary-800/60"
-                  >
+                  <span v-if="item.variantLabel"
+                    class="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/60 dark:border-primary-800/60">
                     {{ item.variantLabel }}
                   </span>
                   <span class="text-[11px] font-bold text-gray-600 dark:text-gray-300 font-mono">
@@ -1052,26 +1298,22 @@ function handlePrint() {
             </div>
 
             <!-- Middle Row: Quantity Stepper & Subtotal -->
-            <div class="flex items-center justify-between pt-1.5 border-t border-dashed border-gray-100 dark:border-gray-700/60">
+            <div
+              class="flex items-center justify-between pt-1.5 border-t border-dashed border-gray-100 dark:border-gray-700/60">
               <!-- Stepper -->
-              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700/60 rounded-xl p-0.5 border border-gray-200/80 dark:border-gray-600/50">
-                <button
-                  type="button"
+              <div
+                class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700/60 rounded-xl p-0.5 border border-gray-200/80 dark:border-gray-600/50">
+                <button type="button"
                   class="w-6 h-6 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:shadow-2xs transition-all cursor-pointer text-xs font-bold active:scale-90"
-                  title="បន្ថយចំនួន"
-                  @click="updateQuantity(idx, -1)"
-                >
+                  title="បន្ថយចំនួន" @click="updateQuantity(idx, -1)">
                   -
                 </button>
                 <span class="w-7 text-center text-xs font-black font-mono text-gray-900 dark:text-white">
                   {{ item.quantity }}
                 </span>
-                <button
-                  type="button"
+                <button type="button"
                   class="w-6 h-6 rounded-lg flex items-center justify-center bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-gray-700 shadow-2xs transition-all cursor-pointer text-xs font-bold active:scale-90"
-                  title="បន្ថែមចំនួន"
-                  @click="updateQuantity(idx, 1)"
-                >
+                  title="បន្ថែមចំនួន" @click="updateQuantity(idx, 1)">
                   +
                 </button>
               </div>
@@ -1087,19 +1329,17 @@ function handlePrint() {
 
             <!-- Bottom Row: Note Input -->
             <div class="relative flex items-center">
-              <UIcon name="i-heroicons-pencil-square" class="w-3.5 h-3.5 text-gray-400 absolute left-2 pointer-events-none" />
-              <input
-                v-model="item.note"
-                type="text"
-                placeholder="ចំណាំបន្ថែម (ស្ករតិច, មិនប៊ីចេង, ខ្ចប់...)"
-                class="w-full pl-7 pr-2.5 py-1 text-[10px] rounded-lg bg-gray-50/90 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/70 focus:outline-hidden focus:border-primary-500 focus:bg-white dark:focus:bg-gray-900 transition-colors text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
-              />
+              <UIcon name="i-heroicons-pencil-square"
+                class="w-3.5 h-3.5 text-gray-400 absolute left-2 pointer-events-none" />
+              <input v-model="item.note" type="text" placeholder="ចំណាំបន្ថែម (ស្ករតិច, មិនប៊ីចេង, ខ្ចប់...)"
+                class="w-full pl-7 pr-2.5 py-1 text-[10px] rounded-lg bg-gray-50/90 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/70 focus:outline-hidden focus:border-primary-500 focus:bg-white dark:focus:bg-gray-900 transition-colors text-gray-700 dark:text-gray-300 placeholder:text-gray-400" />
             </div>
           </div>
         </div>
 
         <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 py-16 space-y-3">
-          <div class="w-16 h-16 rounded-3xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/60 flex items-center justify-center text-gray-400 dark:text-gray-500 shadow-2xs">
+          <div
+            class="w-16 h-16 rounded-3xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/60 flex items-center justify-center text-gray-400 dark:text-gray-500 shadow-2xs">
             <UIcon name="i-heroicons-shopping-bag" class="w-8 h-8 opacity-60 text-primary-500" />
           </div>
           <div class="text-center space-y-1">
@@ -1274,12 +1514,45 @@ function handlePrint() {
               </div>
             </div>
 
-            <p class="text-[11px] text-gray-400 font-mono mt-2">
+            <p class="text-[11px] text-gray-500 font-mono mt-2">
               លេខកុម្ម៉ង់ #{{ lastSavedOrder.orderNumber }} • {{ lastSavedOrder.tableNumber }}
             </p>
             <p class="text-[10px] text-gray-400 font-mono">
-              {{ new Date(lastSavedOrder.createdAt || Date.now()).toLocaleString() }}
+              កាលបរិច្ឆេទ៖ {{ new Date(lastSavedOrder.createdAt || Date.now()).toLocaleString() }}
             </p>
+
+            <!-- Staff Tracking details on Receipt -->
+            <div
+              class="mt-2 pt-2 border-t border-dashed border-gray-200 dark:border-gray-800 text-left text-[11px] space-y-1">
+              <div class="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                <span class="flex items-center gap-1 font-semibold">
+                  <UIcon name="i-heroicons-user" class="w-3.5 h-3.5 text-primary-500" />
+                  <span>អ្នកកត់ Order (Waiter)៖</span>
+                </span>
+                <span class="font-bold text-gray-900 dark:text-white">{{ lastSavedOrder.waiterName || 'Cashier'
+                }}</span>
+              </div>
+
+              <div v-if="lastSavedOrder.billedBy"
+                class="flex items-center justify-between text-purple-700 dark:text-purple-300">
+                <span class="flex items-center gap-1 font-semibold">
+                  <UIcon name="i-heroicons-document-text" class="w-3.5 h-3.5" />
+                  <span>អ្នកកាន់បុងទៅភ្ញៀវ៖</span>
+                </span>
+                <span class="font-bold underline decoration-dotted">{{ lastSavedOrder.billedBy }}</span>
+              </div>
+
+              <div v-if="lastSavedOrder.billedAt"
+                class="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                <span>ម៉ោងចេញបុង៖</span>
+                <span>{{ new Date(lastSavedOrder.billedAt).toLocaleTimeString() }}</span>
+              </div>
+
+              <div class="flex items-center justify-between text-[10px] text-gray-400">
+                <span>បេឡាករ (Cashier)៖</span>
+                <span class="font-mono">{{ lastSavedOrder.cashierName || 'Cashier 01' }}</span>
+              </div>
+            </div>
           </div>
 
           <div class="border-t border-b border-dashed border-gray-300 dark:border-gray-700 py-3 space-y-2 text-left">
@@ -1326,11 +1599,16 @@ function handlePrint() {
               * សូមពិនិត្យមើលមុខម្ហូប និងចំនួនទឹកប្រាក់
             </p>
             <p>វិក្កយបត្រនេះមិនទាន់ជាបង្កាន់ដៃទទួលប្រាក់ឡើយ</p>
+            <p v-if="lastSavedOrder.billedBy" class="text-purple-600 dark:text-purple-400 font-bold text-[10px]">
+              បុគ្គលិកទទួលបន្ទុកកាន់បុង៖ {{ lastSavedOrder.billedBy }}
+            </p>
           </div>
 
-          <div v-else class="pt-2 text-center text-[11px] text-gray-400">
-            <p>ការទូទាត់៖ {{ lastSavedOrder.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (lastSavedOrder.paymentMethod ===
-              'khqr' ? 'KHQR' : 'កាត') }}</p>
+          <div v-else class="pt-2 text-center text-[11px] text-gray-400 space-y-1">
+            <p>ការទូទាត់៖ <span class="font-bold text-gray-700 dark:text-gray-300">{{ getPaymentMethodLabel(lastSavedOrder.paymentMethod) }}</span></p>
+            <p v-if="lastSavedOrder.note" class="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/40 p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-900/50">
+              {{ lastSavedOrder.note }}
+            </p>
             <p class="mt-1 font-bold text-emerald-600 dark:text-emerald-400">សូមអរគុណ និងសូមអញ្ជើញមកពិសាម្តងទៀត!</p>
           </div>
         </div>
@@ -1531,12 +1809,11 @@ function handlePrint() {
     </div>
 
     <!-- MODAL 5: PAYMENT CHECKOUT MODAL (ផ្ទាំងជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់ & គិតលុយ) -->
-    <div
-      v-if="isPaymentModalOpen"
+    <div v-if="isPaymentModalOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-      @click.self="isPaymentModalOpen = false"
-    >
-      <div class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[95vh] flex flex-col overflow-y-auto">
+      @click.self="isPaymentModalOpen = false">
+      <div
+        class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[95vh] flex flex-col overflow-y-auto">
         <!-- Header -->
         <div class="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
           <div>
@@ -1545,21 +1822,22 @@ function handlePrint() {
               <span>គិតលុយ & ទូទាត់ប្រាក់</span>
             </h3>
             <p class="text-xs text-gray-500 mt-0.5">
-              {{ currentSelectedTableName }} • {{ cart.length }} មុខម្ហូប ({{ cart.reduce((a, b) => a + b.quantity, 0) }} ចាន)
+              {{ currentSelectedTableName }} • {{ cart.length }} មុខម្ហូប ({{cart.reduce((a, b) => a + b.quantity, 0)
+              }}
+              ចាន)
             </p>
           </div>
-          <button
-            type="button"
+          <button type="button"
             class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
-            @click="isPaymentModalOpen = false"
-          >
+            @click="isPaymentModalOpen = false">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
         </div>
 
         <!-- Total Bill Card -->
         <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-1">
-          <span class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">ទឹកប្រាក់សរុបត្រូវទូទាត់</span>
+          <span
+            class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">ទឹកប្រាក់សរុបត្រូវទូទាត់</span>
           <div class="flex items-baseline justify-center gap-2">
             <span class="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
               ${{ totalAmount.toFixed(2) }}
@@ -1573,79 +1851,80 @@ function handlePrint() {
           </p>
         </div>
 
-        <!-- Payment Method Options (3 Big Cards) -->
+        <!-- Payment Method Options (Dynamic Active Methods: Cash, ABA, ACLEDA, etc.) -->
         <div class="space-y-1.5">
-          <label class="text-xs font-bold text-gray-700 dark:text-gray-300 block">
-            ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់៖
-          </label>
-          <div class="grid grid-cols-3 gap-2">
-            <!-- 1. Cash -->
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-gray-700 dark:text-gray-300 block">
+              ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់៖
+            </label>
+            <NuxtLink
+              to="/admin/payments"
+              target="_blank"
+              class="text-[10px] text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-0.5 font-bold"
+            >
+              <UIcon name="i-heroicons-cog-6-tooth" class="w-3 h-3" />
+              <span>កំណត់ធនាគារ</span>
+            </NuxtLink>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
+              v-for="method in activePaymentMethods"
+              :key="method.id"
               type="button"
-              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
+              class="p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group text-center"
               :class="[
-                checkoutPaymentMethod === 'cash'
-                  ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/30 font-bold shadow-xs'
+                checkoutPaymentMethod === method.code
+                  ? 'border-primary-600 bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 ring-2 ring-primary-500/30 font-bold shadow-xs'
                   : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               ]"
-              @click="checkoutPaymentMethod === 'cash'"
+              @click="checkoutPaymentMethod = method.code"
             >
               <div
-                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
-                :class="checkoutPaymentMethod === 'cash' ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+                class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
+                :class="checkoutPaymentMethod === method.code ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
               >
-                <UIcon name="i-heroicons-banknotes" class="w-5 h-5" />
+                <UIcon
+                  :name="
+                    method.code === 'cash'
+                      ? 'i-heroicons-banknotes'
+                      : method.code === 'card'
+                      ? 'i-heroicons-credit-card'
+                      : 'i-heroicons-qr-code'
+                  "
+                  class="w-4 h-4"
+                />
               </div>
-              <span class="text-xs">សាច់ប្រាក់</span>
-              <span class="text-[10px] text-gray-400 font-mono">Cash</span>
+              <span class="text-xs font-bold truncate max-w-full">{{ method.name }}</span>
+              <span class="text-[9px] text-gray-400 font-mono uppercase">{{ method.code }}</span>
             </button>
 
-            <!-- 2. KHQR -->
+            <!-- Mixed Payment Button Option -->
             <button
               type="button"
-              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
+              class="p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group text-center"
               :class="[
-                checkoutPaymentMethod === 'khqr'
-                  ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 ring-2 ring-rose-500/30 font-bold shadow-xs'
+                checkoutPaymentMethod === 'mixed'
+                  ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/30 font-bold shadow-xs'
                   : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               ]"
-              @click="checkoutPaymentMethod = 'khqr'"
+              @click="checkoutPaymentMethod = 'mixed'"
             >
               <div
-                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
-                :class="checkoutPaymentMethod === 'khqr' ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+                class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
+                :class="checkoutPaymentMethod === 'mixed' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
               >
-                <UIcon name="i-heroicons-qr-code" class="w-5 h-5" />
+                <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4" />
               </div>
-              <span class="text-xs">KHQR</span>
-              <span class="text-[10px] text-gray-400 font-mono">Bakong Scan</span>
-            </button>
-
-            <!-- 3. Card -->
-            <button
-              type="button"
-              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
-              :class="[
-                checkoutPaymentMethod === 'card'
-                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/30 font-bold shadow-xs'
-                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              ]"
-              @click="checkoutPaymentMethod = 'card'"
-            >
-              <div
-                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
-                :class="checkoutPaymentMethod === 'card' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
-              >
-                <UIcon name="i-heroicons-credit-card" class="w-5 h-5" />
-              </div>
-              <span class="text-xs">កាតធនាគារ</span>
-              <span class="text-[10px] text-gray-400 font-mono">Card POS</span>
+              <span class="text-xs font-bold truncate max-w-full">បង់ចម្រុះ</span>
+              <span class="text-[9px] text-gray-400 font-mono uppercase">CASH + ONLINE</span>
             </button>
           </div>
         </div>
 
         <!-- Conditional details for Cash (ប្រាក់ទទួល & ប្រាក់អាប់) -->
-        <div v-if="checkoutPaymentMethod === 'cash'" class="p-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70 space-y-3">
+        <div v-if="checkoutPaymentMethod === 'cash'"
+          class="p-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70 space-y-3">
           <div class="space-y-1.5">
             <div class="flex items-center justify-between text-xs">
               <span class="font-bold text-gray-700 dark:text-gray-300">ប្រាក់ទទួលពីភ្ញៀវ៖</span>
@@ -1654,17 +1933,11 @@ function handlePrint() {
 
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-base font-black text-gray-400">$</span>
-              <input
-                v-model.number="checkoutReceivedCash"
-                type="number"
-                step="0.5"
-                min="0"
-                placeholder="0.00"
-                class="w-full pl-8 pr-3 py-2 text-base font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
-              />
+              <input v-model.number="checkoutReceivedCash" type="number" step="0.5" min="0" placeholder="0.00"
+                class="w-full pl-8 pr-3 py-2 text-base font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white" />
             </div>
 
-            <!-- Quick Bills Suggestions -->
+            <!-- Quick Cash Suggestions -->
             <div class="flex flex-wrap items-center gap-1.5 pt-1">
               <button
                 type="button"
@@ -1686,35 +1959,167 @@ function handlePrint() {
           </div>
 
           <!-- Change calculation display -->
-          <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
+          <div
+            class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
             <div>
               <span class="text-xs font-bold text-gray-700 dark:text-gray-300 block">ប្រាក់អាប់ជូនភ្ញៀវ៖</span>
               <span class="text-[10px] text-gray-400 font-mono">≈ {{ formatRiel(checkoutChangeUSD) }} ៛</span>
             </div>
-            <span
-              class="text-xl font-black font-mono"
-              :class="checkoutChangeUSD > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'"
-            >
+            <span class="text-xl font-black font-mono"
+              :class="checkoutChangeUSD > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'">
               ${{ checkoutChangeUSD.toFixed(2) }}
             </span>
           </div>
         </div>
 
-        <!-- Conditional details for KHQR -->
-        <div v-else-if="checkoutPaymentMethod === 'khqr'" class="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/60 flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
-            <UIcon name="i-heroicons-qr-code" class="w-6 h-6" />
+        <!-- Conditional details for Mixed Payment (សាច់ប្រាក់ + Pay Online/KHQR) -->
+        <div v-else-if="checkoutPaymentMethod === 'mixed'"
+          class="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-indigo-900/50">
+            <span class="text-xs font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+              <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4 text-indigo-600" />
+              <span>បែងចែកការបង់ប្រាក់ (សាច់ប្រាក់ + Pay Online)</span>
+            </span>
+            <span class="text-[11px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+              សរុប៖ ${{ totalAmount.toFixed(2) }}
+            </span>
           </div>
-          <div class="min-w-0 flex-1">
-            <p class="text-xs font-bold text-rose-900 dark:text-rose-200">ទូទាត់តាម KHQR / Bakong</p>
-            <p class="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5 leading-relaxed">
-              សូមឱ្យភ្ញៀវស្កេនទូទាត់ទឹកប្រាក់ ${{ totalAmount.toFixed(2) }} ({{ formatRiel(totalAmount) }} ៛) តាម QR Standee លើតុ ឬទូរស័ព្ទ។
-            </p>
+
+          <!-- Section 1: Cash Amount -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5 text-emerald-600" />
+                <span>១. ចំនួនសាច់ប្រាក់ (Cash)៖</span>
+              </label>
+              <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedCashUSD) || 0) }} ៛</span>
+            </div>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
+              <input
+                v-model.number="mixedCashUSD"
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="0.00"
+                class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
+                @input="onMixedCashInput"
+              />
+            </div>
+          </div>
+
+          <!-- Section 2: Online / Bank Amount & Bank Choice -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5 text-sky-600" />
+                <span>២. ចំនួន Pay Online / KHQR៖</span>
+              </label>
+              <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedOnlineUSD) || 0) }} ៛</span>
+            </div>
+
+            <!-- Online Bank Selector -->
+            <div v-if="onlinePaymentMethods.length > 1" class="flex flex-wrap gap-1.5">
+              <button
+                v-for="b in onlinePaymentMethods"
+                :key="b.id"
+                type="button"
+                class="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1"
+                :class="mixedOnlineBank === b.code
+                  ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'"
+                @click="mixedOnlineBank = b.code"
+              >
+                <UIcon name="i-heroicons-qr-code" class="w-3 h-3" />
+                <span>{{ b.name }}</span>
+              </button>
+            </div>
+
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
+              <input
+                v-model.number="mixedOnlineUSD"
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="0.00"
+                class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
+                @input="onMixedOnlineInput"
+              />
+            </div>
+
+            <!-- QR Preview for Mixed Online Portion if available -->
+            <div v-if="currentSelectedMixedOnlineObj?.qrImageUrl && mixedOnlineUSD > 0"
+              class="p-2.5 rounded-xl bg-white dark:bg-gray-900 border border-sky-200 dark:border-sky-900 flex items-center gap-3">
+              <img
+                :src="currentSelectedMixedOnlineObj.qrImageUrl"
+                :alt="currentSelectedMixedOnlineObj.name"
+                class="w-14 h-14 object-contain rounded-lg border border-gray-100 dark:border-gray-800 shrink-0"
+              />
+              <div class="min-w-0 flex-1 text-xs">
+                <p class="font-bold text-sky-900 dark:text-sky-200 truncate">
+                  ស្កេន {{ currentSelectedMixedOnlineObj.name }} ចំនួន ${{ Number(mixedOnlineUSD).toFixed(2) }}
+                </p>
+                <p v-if="currentSelectedMixedOnlineObj.accountName || currentSelectedMixedOnlineObj.accountNumber" class="text-[11px] text-gray-500 truncate mt-0.5">
+                  {{ currentSelectedMixedOnlineObj.accountName }} <span v-if="currentSelectedMixedOnlineObj.accountNumber">• {{ currentSelectedMixedOnlineObj.accountNumber }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Calculation & Status Indicator -->
+          <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2 text-xs">
+            <div class="flex items-center justify-between font-mono">
+              <span class="text-gray-500">សរុបបានបង់ (Cash + Online)៖</span>
+              <span class="font-bold text-gray-900 dark:text-white">${{ mixedTotalPaid.toFixed(2) }}</span>
+            </div>
+
+            <!-- Status Alert -->
+            <div v-if="mixedRemainingUSD > 0"
+              class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-rose-700 dark:text-rose-300 font-bold">
+              <span class="flex items-center gap-1">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" />
+                <span>នៅខ្វះទឹកប្រាក់៖</span>
+              </span>
+              <span class="font-mono">${{ mixedRemainingUSD.toFixed(2) }}</span>
+            </div>
+
+            <div v-else-if="mixedChangeUSD > 0"
+              class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 flex items-center justify-between text-amber-700 dark:text-amber-300 font-bold">
+              <span class="flex items-center gap-1">
+                <UIcon name="i-heroicons-banknotes" class="w-4 h-4 shrink-0" />
+                <span>ប្រាក់អាប់ជូនភ្ញៀវ (ពីសាច់ប្រាក់)៖</span>
+              </span>
+              <span class="font-mono">${{ mixedChangeUSD.toFixed(2) }} (≈ {{ formatRiel(mixedChangeUSD) }} ៛)</span>
+            </div>
+
+            <div v-else
+              class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 flex items-center justify-between text-emerald-700 dark:text-emerald-300 font-bold">
+              <span class="flex items-center gap-1">
+                <UIcon name="i-heroicons-check-circle" class="w-4 h-4 shrink-0" />
+                <span>ទូទាត់គ្រប់ចំនួន ១០០%</span>
+              </span>
+              <span class="font-mono font-black">${{ mixedTotalPaid.toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <!-- Section 4: Extra Note for Mixed Payment -->
+          <div class="space-y-1 text-xs">
+            <label class="font-medium text-gray-500 dark:text-gray-400 block">
+              ចំណាំបន្ថែមលើការបង់ចម្រុះ (ស្រេចចិត្ត)៖
+            </label>
+            <input
+              v-model="mixedNoteInput"
+              type="text"
+              placeholder="ឧ. ភ្ញៀវបង់លុយសុទ្ធ $10 នៅសល់ $15 វេរ ABA"
+              class="w-full px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200"
+            />
           </div>
         </div>
 
         <!-- Conditional details for Card -->
-        <div v-else-if="checkoutPaymentMethod === 'card'" class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-center gap-3">
+        <div v-else-if="checkoutPaymentMethod === 'card'"
+          class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
             <UIcon name="i-heroicons-credit-card" class="w-6 h-6" />
           </div>
@@ -1726,28 +2131,50 @@ function handlePrint() {
           </div>
         </div>
 
+        <!-- Conditional details for Bank / KHQR (ABA, ACLEDA, Wing...) -->
+        <div v-else
+          class="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 space-y-3">
+          <!-- QR Code Preview if uploaded -->
+          <div v-if="currentSelectedPaymentMethodObj?.qrImageUrl" class="text-center space-y-2">
+            <div class="inline-block p-2 bg-white rounded-2xl border border-gray-200 shadow-xs">
+              <img
+                :src="currentSelectedPaymentMethodObj.qrImageUrl"
+                :alt="currentSelectedPaymentMethodObj.name"
+                class="max-h-48 w-auto object-contain rounded-xl mx-auto"
+              />
+            </div>
+            <p class="text-[11px] font-bold text-sky-800 dark:text-sky-300">
+              ស្កេនទូទាត់ទឹកប្រាក់ ${{ totalAmount.toFixed(2) }} (≈ {{ formatRiel(totalAmount) }} ៛)
+            </p>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0">
+              <UIcon name="i-heroicons-qr-code" class="w-6 h-6" />
+            </div>
+            <div class="min-w-0 flex-1 text-xs">
+              <p class="font-bold text-sky-900 dark:text-sky-200">
+                ទូទាត់តាម {{ currentSelectedPaymentMethodObj?.name || 'KHQR' }}
+              </p>
+              <div v-if="currentSelectedPaymentMethodObj?.accountName || currentSelectedPaymentMethodObj?.accountNumber" class="text-[11px] text-sky-700 dark:text-sky-300 mt-0.5 font-medium">
+                <span v-if="currentSelectedPaymentMethodObj?.accountName">ឈ្មោះ៖ <strong>{{ currentSelectedPaymentMethodObj.accountName }}</strong></span>
+                <span v-if="currentSelectedPaymentMethodObj?.accountNumber" class="ml-2 font-mono">លេខ៖ <strong>{{ currentSelectedPaymentMethodObj.accountNumber }}</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Modal Actions -->
         <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-            @click="isPaymentModalOpen = false"
-          >
+            @click="isPaymentModalOpen = false">
             បោះបង់
           </button>
-          <button
-            type="button"
-            :disabled="isSubmitting"
+          <button type="button" :disabled="isSubmitting || (checkoutPaymentMethod === 'mixed' && mixedTotalPaid < totalAmount)"
             class="flex-2 py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
-            :class="[
-              checkoutPaymentMethod === 'khqr'
-                ? 'bg-rose-600 hover:bg-rose-500'
-                : checkoutPaymentMethod === 'card'
-                ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-emerald-600 hover:bg-emerald-500'
-            ]"
-            @click="executeCheckout"
-          >
+            :class="checkoutPaymentMethod === 'cash' ? 'bg-emerald-600 hover:bg-emerald-500' : (checkoutPaymentMethod === 'mixed' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-primary-600 hover:bg-primary-500')"
+            @click="executeCheckout">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
             <span>បញ្ជាក់ការបង់ប្រាក់ (${{ totalAmount.toFixed(2) }}) & ចេញវិក្កយបត្រ</span>
@@ -1755,5 +2182,86 @@ function handlePrint() {
         </div>
       </div>
     </div>
+
+    <!-- MODAL 6: SELECT BILL COLLECTOR (អ្នកកាន់បុងទៅគិតលុយ) -->
+    <div v-if="isBilledByModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div
+        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+        <!-- Header -->
+        <div class="flex items-start justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+          <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white flex items-center gap-1.5">
+              <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-purple-600" />
+              <span>ចេញបុងបណ្ដោះអាសន្ន - {{ currentSelectedTableName }}</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              តើបុគ្គលិកណាជាអ្នកយកបុងទៅជូនភ្ញៀវ និងប្រមូលលុយ?
+            </p>
+          </div>
+          <button type="button"
+            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="isBilledByModalOpen = false">
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Quick Staff Selection Buttons -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
+            ជ្រើសរើសបុគ្គលិកកាន់បុង (ចុច ១ ភ្លែត)៖
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <button v-for="staff in presetStaffList" :key="staff" type="button"
+              class="py-2.5 px-2 rounded-xl text-xs font-black transition-all border flex items-center justify-center gap-1 cursor-pointer"
+              :class="activeBilledByName === staff
+                ? 'bg-purple-600 text-white border-purple-600 shadow-sm scale-102'
+                : 'bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-purple-50 hover:border-purple-300'"
+              @click="selectedBilledBy = staff; customBilledByInput = ''">
+              <UIcon name="i-heroicons-user" class="w-3.5 h-3.5" />
+              <span>{{ staff }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <button type="button"
+            class="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 cursor-pointer"
+            @click="isBilledByModalOpen = false">
+            បោះបង់
+          </button>
+          <button type="button" :disabled="!activeBilledByName || isPrintingPreBill"
+            class="flex-2 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 flex items-center justify-center gap-1.5 shadow-md cursor-pointer disabled:opacity-40"
+            @click="confirmBilledByAndPrint">
+            <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <UIcon v-else name="i-heroicons-printer" class="w-4 h-4" />
+            <span>បញ្ជាក់ចេញបុង ({{ activeBilledByName || 'ជ្រើសរើស' }})</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #receipt-print-area,
+  #receipt-print-area * {
+    visibility: visible;
+  }
+
+  #receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+}
+</style>

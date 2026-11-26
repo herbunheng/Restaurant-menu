@@ -9,6 +9,8 @@ const adminNav = [
   { label: 'កន្លែងគិតលុយ (POS)', icon: 'i-heroicons-calculator', to: '/admin/pos' },
   { label: 'មុខម្ហូប និងភេសជ្ជៈ', icon: 'i-heroicons-book-open', to: '/admin/menu' },
   { label: 'របាយការណ៍ប្រចាំថ្ងៃ', icon: 'i-heroicons-chart-bar-square', to: '/admin/reports' },
+  { label: 'វិធីសាស្ត្រទូទាត់', icon: 'i-heroicons-credit-card', to: '/admin/payments' },
+  { label: 'បុគ្គលិក', icon: 'i-heroicons-user-group', to: '/admin/staff' },
   { label: 'អ្នកប្រើប្រាស់', icon: 'i-heroicons-users', to: '/admin/users' },
   { label: 'កំណត់ត្រាប្រព័ន្ធ', icon: 'i-heroicons-document-text', to: '/admin/logs' },
   { label: 'ការកំណត់', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/settings' },
