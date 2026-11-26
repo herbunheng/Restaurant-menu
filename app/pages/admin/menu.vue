@@ -116,9 +116,9 @@ function openEditItemModal(item: MenuItem) {
       item.variants && item.variants.length > 0
         ? JSON.parse(JSON.stringify(item.variants))
         : [
-            { label: 'ចានតូច (Small)', price: Number(item.price) || 0 },
-            { label: 'ចានធំ (Large)', price: (Number(item.price) || 0) + 1.5 },
-          ],
+          { label: 'ចានតូច (Small)', price: Number(item.price) || 0 },
+          { label: 'ចានធំ (Large)', price: (Number(item.price) || 0) + 1.5 },
+        ],
   };
   isItemModalOpen.value = true;
 }
@@ -410,7 +410,8 @@ function formatRiel(usd: number): string {
 <template>
   <div class="space-y-6 max-w-7xl mx-auto pb-12">
     <!-- Top Header -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200 dark:border-gray-800">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200 dark:border-gray-800">
       <div>
         <h1 class="text-2xl font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-2.5">
           <UIcon name="i-heroicons-book-open" class="w-7 h-7 text-primary-600 dark:text-primary-400" />
@@ -423,11 +424,9 @@ function formatRiel(usd: number): string {
 
       <div class="flex items-center gap-3">
         <!-- New Item Button -->
-        <button
-          type="button"
+        <button type="button"
           class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-          @click="openCreateItemModal"
-        >
+          @click="openCreateItemModal">
           <UIcon name="i-heroicons-plus-circle" class="w-5 h-5" />
           <span>+ Add New Dish</span>
         </button>
@@ -471,31 +470,25 @@ function formatRiel(usd: number): string {
 
     <!-- Navigation Tabs -->
     <div class="flex border-b border-gray-200 dark:border-gray-800">
-      <button
-        type="button"
+      <button type="button"
         class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer"
         :class="[
           activeTab === 'items'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-        ]"
-        @click="activeTab = 'items'"
-      >
+        ]" @click="activeTab = 'items'">
         <UIcon name="i-heroicons-list-bullet" class="w-4 h-4" />
         <span>Menu Items (បញ្ជីមុខម្ហូប)</span>
         <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800">{{ totalItems }}</span>
       </button>
 
-      <button
-        type="button"
+      <button type="button"
         class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer"
         :class="[
           activeTab === 'categories'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-        ]"
-        @click="activeTab = 'categories'"
-      >
+        ]" @click="activeTab = 'categories'">
         <UIcon name="i-heroicons-rectangle-stack" class="w-4 h-4" />
         <span>Categories (ប្រភេទមុខម្ហូប)</span>
         <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800">{{ totalCategories }}</span>
@@ -505,23 +498,19 @@ function formatRiel(usd: number): string {
     <!-- TAB 1: MENU ITEMS LIST -->
     <div v-if="activeTab === 'items'" class="space-y-4">
       <!-- Search & Filters -->
-      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+      <div
+        class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
         <div class="relative flex-1">
-          <UIcon name="i-heroicons-magnifying-glass" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="ស្វែងរកតាមឈ្មោះម្ហូប (Search dish name...)"
-            class="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-          />
+          <UIcon name="i-heroicons-magnifying-glass"
+            class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input v-model="searchQuery" type="text" placeholder="ស្វែងរកតាមឈ្មោះម្ហូប (Search dish name...)"
+            class="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500" />
         </div>
 
         <div class="flex items-center gap-2">
           <span class="text-xs text-gray-500 shrink-0">Filter:</span>
-          <select
-            v-model="selectedCategoryFilter"
-            class="px-3 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
-          >
+          <select v-model="selectedCategoryFilter"
+            class="px-3 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer">
             <option value="all">All Categories</option>
             <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
               {{ cat.name }}
@@ -532,43 +521,31 @@ function formatRiel(usd: number): string {
 
       <!-- Items Grid View -->
       <div v-if="filteredItems.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div
-          v-for="item in filteredItems"
-          :key="item.id"
-          class="group rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
-        >
+        <div v-for="item in filteredItems" :key="item.id"
+          class="group rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
           <!-- Image Header with Availability Tag -->
           <div class="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 overflow-hidden">
-            <img
-              v-if="item.imageUrl"
-              :src="item.imageUrl"
-              :alt="item.name"
-              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            />
+            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
             <div v-else class="w-full h-full flex flex-col items-center justify-center text-gray-400">
               <UIcon name="i-heroicons-photo" class="w-8 h-8" />
               <span class="text-xs mt-1">No Image</span>
             </div>
 
             <!-- Category Badge -->
-            <span
-              v-if="item.categoryName"
-              class="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-black/60 text-white backdrop-blur-md"
-            >
+            <span v-if="item.categoryName"
+              class="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-black/60 text-white backdrop-blur-md">
               {{ item.categoryName }}
             </span>
 
             <!-- Status Pill -->
-            <button
-              type="button"
+            <button type="button"
               class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg text-xs font-semibold backdrop-blur-md transition-all cursor-pointer"
               :class="[
                 item.isAvailable
                   ? 'bg-emerald-500/90 text-white hover:bg-emerald-600'
                   : 'bg-rose-500/90 text-white hover:bg-rose-600',
-              ]"
-              @click="handleToggleAvailability(item)"
-            >
+              ]" @click="handleToggleAvailability(item)">
               {{ item.isAvailable ? '✓ In Stock' : '✗ Sold Out' }}
             </button>
           </div>
@@ -595,14 +572,13 @@ function formatRiel(usd: number): string {
               </p>
 
               <!-- Variant Badges (Options & Sizes) -->
-              <div v-if="item.hasVariants && item.variants && item.variants.length > 0" class="pt-1 flex flex-wrap gap-1.5">
-                <span
-                  v-for="(v, vIdx) in item.variants"
-                  :key="vIdx"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-primary-50/80 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 border border-primary-200/60 dark:border-primary-800/60 shadow-2xs"
-                >
+              <div v-if="item.hasVariants && item.variants && item.variants.length > 0"
+                class="pt-1 flex flex-wrap gap-1.5">
+                <span v-for="(v, vIdx) in item.variants" :key="vIdx"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-primary-50/80 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 border border-primary-200/60 dark:border-primary-800/60 shadow-2xs">
                   <span class="text-gray-600 dark:text-gray-300">{{ v.label }}:</span>
-                  <span class="font-bold font-mono text-primary-700 dark:text-primary-300">${{ Number(v.price).toFixed(2) }}</span>
+                  <span class="font-bold font-mono text-primary-700 dark:text-primary-300">${{
+                    Number(v.price).toFixed(2) }}</span>
                 </span>
               </div>
             </div>
@@ -610,7 +586,8 @@ function formatRiel(usd: number): string {
             <!-- Footer Action Buttons -->
             <div class="pt-4 mt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span v-if="item.hasVariants" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+                <span v-if="item.hasVariants"
+                  class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
                   {{ item.variants?.length ?? 0 }} Sizes
                 </span>
                 <span v-else class="text-[11px] text-gray-400 font-mono">
@@ -619,20 +596,14 @@ function formatRiel(usd: number): string {
               </div>
 
               <div class="flex items-center gap-1.5">
-                <button
-                  type="button"
+                <button type="button"
                   class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                  title="Edit Dish"
-                  @click="openEditItemModal(item)"
-                >
+                  title="Edit Dish" @click="openEditItemModal(item)">
                   <UIcon name="i-heroicons-pencil-square" class="w-4 h-4 text-primary-500" />
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition-colors cursor-pointer"
-                  title="Delete Dish"
-                  @click="handleDeleteItem(item.id, item.name)"
-                >
+                  title="Delete Dish" @click="handleDeleteItem(item.id, item.name)">
                   <UIcon name="i-heroicons-trash" class="w-4 h-4 text-rose-500" />
                 </button>
               </div>
@@ -642,22 +613,19 @@ function formatRiel(usd: number): string {
       </div>
 
       <!-- Empty State -->
-      <div
-        v-else
-        class="py-16 text-center rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-8 space-y-3"
-      >
-        <div class="w-14 h-14 mx-auto rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center">
+      <div v-else
+        class="py-16 text-center rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-8 space-y-3">
+        <div
+          class="w-14 h-14 mx-auto rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center">
           <UIcon name="i-heroicons-book-open" class="w-7 h-7" />
         </div>
         <h3 class="text-base font-bold text-gray-900 dark:text-white">មិនទាន់មានមុខម្ហូបនៅឡើយទេ</h3>
         <p class="text-xs text-gray-500 max-w-sm mx-auto">
           សូមចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើតមុខម្ហូបថ្មីដំបូងរបស់អ្នក រួមជាមួយការបញ្ចូលរូបភាព Cloudinary។
         </p>
-        <button
-          type="button"
+        <button type="button"
           class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-500 shadow-sm cursor-pointer"
-          @click="openCreateItemModal"
-        >
+          @click="openCreateItemModal">
           <UIcon name="i-heroicons-plus-circle" class="w-4 h-4" />
           <span>Add New Dish</span>
         </button>
@@ -667,7 +635,8 @@ function formatRiel(usd: number): string {
     <!-- TAB 2: CATEGORIES MANAGEMENT -->
     <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Create Category Form Card -->
-      <div class="p-6 rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
+      <div
+        class="p-6 rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
         <div>
           <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <UIcon name="i-heroicons-plus-circle" class="w-5 h-5 text-primary-500" />
@@ -681,32 +650,21 @@ function formatRiel(usd: number): string {
             <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Category Name (ឈ្មោះប្រភេទ) *
             </label>
-            <input
-              v-model="newCatName"
-              type="text"
-              placeholder="e.g. Appetizers (ម្ហូបកូរ)"
+            <input v-model="newCatName" type="text" placeholder="e.g. Appetizers (ម្ហូបកូរ)"
               class="w-full px-3.5 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-              required
-            />
+              required />
           </div>
 
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Description (ការពិពណ៌នាសង្ខេប)
             </label>
-            <textarea
-              v-model="newCatDesc"
-              rows="3"
-              placeholder="Short description of this category..."
-              class="w-full px-3.5 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-            ></textarea>
+            <textarea v-model="newCatDesc" rows="3" placeholder="Short description of this category..."
+              class="w-full px-3.5 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"></textarea>
           </div>
 
-          <button
-            type="submit"
-            :disabled="isSubmittingCat"
-            class="w-full py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-          >
+          <button type="submit" :disabled="isSubmittingCat"
+            class="w-full py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer">
             <UIcon v-if="isSubmittingCat" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <span>Create Category</span>
           </button>
@@ -714,7 +672,8 @@ function formatRiel(usd: number): string {
       </div>
 
       <!-- Categories List Table -->
-      <div class="lg:col-span-2 p-6 rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
+      <div
+        class="lg:col-span-2 p-6 rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
         <div>
           <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <UIcon name="i-heroicons-rectangle-stack" class="w-5 h-5 text-primary-500" />
@@ -724,26 +683,20 @@ function formatRiel(usd: number): string {
         </div>
 
         <div class="divide-y divide-gray-100 dark:divide-gray-800">
-          <div
-            v-for="cat in categoriesList"
-            :key="cat.id"
-            class="py-3.5 flex items-center justify-between gap-4"
-          >
+          <div v-for="cat in categoriesList" :key="cat.id" class="py-3.5 flex items-center justify-between gap-4">
             <div>
               <p class="font-bold text-sm text-gray-900 dark:text-white">{{ cat.name }}</p>
               <p v-if="cat.description" class="text-xs text-gray-500 mt-0.5">{{ cat.description }}</p>
             </div>
 
             <div class="flex items-center gap-2">
-              <span class="px-2.5 py-1 rounded-lg text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                {{ menuList.filter((m) => m.categoryId === cat.id).length }} dishes
+              <span
+                class="px-2.5 py-1 rounded-lg text-xs font-mono bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                {{menuList.filter((m) => m.categoryId === cat.id).length}} dishes
               </span>
-              <button
-                type="button"
+              <button type="button"
                 class="p-2 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                title="Delete Category"
-                @click="handleDeleteCategory(cat)"
-              >
+                title="Delete Category" @click="handleDeleteCategory(cat)">
                 <UIcon name="i-heroicons-trash" class="w-4 h-4" />
               </button>
             </div>
@@ -753,11 +706,10 @@ function formatRiel(usd: number): string {
     </div>
 
     <!-- CREATE / EDIT MENU ITEM MODAL -->
-    <div
-      v-if="isItemModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-    >
-      <div class="relative w-full max-w-xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden">
+    <div v-if="isItemModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div
+        class="relative w-full max-w-xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col overflow-hidden">
         <!-- Modal Header -->
         <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <div>
@@ -766,49 +718,49 @@ function formatRiel(usd: number): string {
             </h2>
             <p class="text-xs text-gray-500">បញ្ចូលឈ្មោះម្ហូប, ប្រភេទ, តម្លៃ/ទំហំ និងរូបភាព Cloudinary</p>
           </div>
-          <button
-            type="button"
+          <button type="button"
             class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
-            @click="isItemModalOpen = false"
-          >
+            @click="isItemModalOpen = false">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
         </div>
 
         <!-- Modal Form Body -->
         <div class="p-6 overflow-y-auto space-y-5">
-          <!-- 1. Item Name -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              Dish / Item Name (ឈ្មោះមុខម្ហូប) *
-            </label>
-            <input
-              v-model="itemForm.name"
-              type="text"
-              placeholder="e.g. ឡុកឡាក់សាច់គោ (Beef Lok Lak)"
-              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-medium"
-              required
-            />
-          </div>
+          <!-- 1. Item Name & Category (Flex in 1 container) -->
+          <div class="flex flex-col sm:flex-row gap-4">
+            <div class="flex-1 space-y-1.5">
+              <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Dish / Item Name (ឈ្មោះមុខម្ហូប) *
+              </label>
+              <input
+                v-model="itemForm.name"
+                type="text"
+                placeholder="e.g. ឡុកឡាក់សាច់គោ (Beef Lok Lak)"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-medium"
+                required
+              />
+            </div>
 
-          <!-- 2. Category -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              Category (ប្រភេទមុខម្ហូប)
-            </label>
-            <select
-              v-model="itemForm.categoryId"
-              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
-            >
-              <option value="">-- No Category --</option>
-              <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
-                {{ cat.name }}
-              </option>
-            </select>
+            <div class="sm:w-5/12 space-y-1.5">
+              <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Category (ប្រភេទមុខម្ហូប)
+              </label>
+              <select
+                v-model="itemForm.categoryId"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
+              >
+                <option value="">-- No Category --</option>
+                <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
+                  {{ cat.name }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <!-- 3. Pricing & Variants Section -->
-          <div class="p-4 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 space-y-4">
+          <div
+            class="p-4 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 space-y-4">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
@@ -822,14 +774,10 @@ function formatRiel(usd: number): string {
 
               <!-- Switch -->
               <label class="relative inline-flex items-center cursor-pointer">
-                <input
-                  v-model="itemForm.hasVariants"
-                  type="checkbox"
-                  class="sr-only peer"
-                />
+                <input v-model="itemForm.hasVariants" type="checkbox" class="sr-only peer" />
                 <div
-                  class="w-11 h-6 bg-gray-200 peer-focus:outline-hidden rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"
-                ></div>
+                  class="w-11 h-6 bg-gray-200 peer-focus:outline-hidden rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
+                </div>
                 <span class="ml-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
                   {{ itemForm.hasVariants ? 'ច្រើនតម្លៃ (Variants)' : 'តម្លៃទោល (Single)' }}
                 </span>
@@ -848,15 +796,9 @@ function formatRiel(usd: number): string {
               </div>
               <div class="relative">
                 <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                <input
-                  v-model.number="itemForm.price"
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  placeholder="0.00"
+                <input v-model.number="itemForm.price" type="number" step="0.25" min="0" placeholder="0.00"
                   class="w-full pl-8 pr-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400"
-                  required
-                />
+                  required />
               </div>
             </div>
 
@@ -865,19 +807,15 @@ function formatRiel(usd: number): string {
               <!-- Quick Presets -->
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ (Presets):</span>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('sizes')"
-                >
+                  @click="applyPreset('sizes')">
                   <UIcon name="i-heroicons-scale" class="w-3.5 h-3.5 text-primary-500" />
                   <span>🍽️ S / M / L (តូច/កណ្តាល/ធំ)</span>
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('drinks')"
-                >
+                  @click="applyPreset('drinks')">
                   <UIcon name="i-heroicons-beaker" class="w-3.5 h-3.5 text-primary-500" />
                   <span>☕ ក្តៅ / ត្រជាក់ / ក្រឡុក</span>
                 </button>
@@ -885,42 +823,26 @@ function formatRiel(usd: number): string {
 
               <!-- Variant Rows -->
               <div class="space-y-2">
-                <div
-                  v-for="(variant, vIdx) in itemForm.variants"
-                  :key="vIdx"
-                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs"
-                >
+                <div v-for="(variant, vIdx) in itemForm.variants" :key="vIdx"
+                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs">
                   <div class="flex-1">
-                    <input
-                      v-model="variant.label"
-                      type="text"
-                      placeholder="e.g. ចានតូច (Small), ត្រជាក់ (Iced)..."
+                    <input v-model="variant.label" type="text" placeholder="e.g. ចានតូច (Small), ត្រជាក់ (Iced)..."
                       class="w-full px-3 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-medium"
-                      required
-                    />
+                      required />
                   </div>
 
                   <div class="w-32 relative">
                     <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">$</span>
-                    <input
-                      v-model.number="variant.price"
-                      type="number"
-                      step="0.25"
-                      min="0"
-                      placeholder="0.00"
+                    <input v-model.number="variant.price" type="number" step="0.25" min="0" placeholder="0.00"
                       class="w-full pl-6 pr-2 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400 font-mono text-right"
-                      required
-                    />
+                      required />
                   </div>
 
-                  <button
-                    type="button"
+                  <button type="button"
                     class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                    title="Remove variant"
-                    :disabled="itemForm.variants.length <= 1"
+                    title="Remove variant" :disabled="itemForm.variants.length <= 1"
                     :class="{ 'opacity-30 cursor-not-allowed': itemForm.variants.length <= 1 }"
-                    @click="removeVariantOption(vIdx)"
-                  >
+                    @click="removeVariantOption(vIdx)">
                     <UIcon name="i-heroicons-trash" class="w-4 h-4" />
                   </button>
                 </div>
@@ -928,11 +850,9 @@ function formatRiel(usd: number): string {
 
               <!-- Add Variant Button -->
               <div class="flex items-center justify-between pt-1">
-                <button
-                  type="button"
+                <button type="button"
                   class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/70 transition-colors cursor-pointer"
-                  @click="addVariantOption"
-                >
+                  @click="addVariantOption">
                   <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" />
                   <span>+ Add Variant / Size Option</span>
                 </button>
@@ -946,13 +866,8 @@ function formatRiel(usd: number): string {
 
           <!-- 4. Image Upload (+ img 1) using Reka UI Component -->
           <div class="space-y-1.5">
-            <UploadImageUploader
-              v-model="itemForm.imageUrl"
-              folder="menu"
-              label="Dish Photo (រូបភាពមុខម្ហូប)"
-              hint="PNG, JPG, WEBP ទៅកាន់ Cloudinary"
-              aspect-ratio="video"
-            />
+            <UploadImageUploader v-model="itemForm.imageUrl" folder="menu" label="Dish Photo (រូបភាពមុខម្ហូប)"
+              hint="PNG, JPG, WEBP ទៅកាន់ Cloudinary" aspect-ratio="video" />
           </div>
 
           <!-- 5. Description -->
@@ -960,44 +875,34 @@ function formatRiel(usd: number): string {
             <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Description (ការពិពណ៌នាសង្ខេប)
             </label>
-            <textarea
-              v-model="itemForm.description"
-              rows="2"
-              placeholder="ព័ត៌មានបន្ថែមអំពីគ្រឿងផ្សំ ឬរសជាតិ..."
-              class="w-full px-3.5 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-            ></textarea>
+            <textarea v-model="itemForm.description" rows="2" placeholder="ព័ត៌មានបន្ថែមអំពីគ្រឿងផ្សំ ឬរសជាតិ..."
+              class="w-full px-3.5 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"></textarea>
           </div>
 
           <!-- 6. Availability Switch -->
-          <div class="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60">
+          <div
+            class="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60">
             <div>
               <p class="text-sm font-semibold text-gray-900 dark:text-white">Is Available (មានលក់)</p>
               <p class="text-xs text-gray-500">បើកឱ្យភ្ញៀវអាចកុម្ម៉ង់មុខម្ហូបនេះបាន</p>
             </div>
-            <input
-              v-model="itemForm.isAvailable"
-              type="checkbox"
-              class="w-5 h-5 rounded-md text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 cursor-pointer"
-            />
+            <input v-model="itemForm.isAvailable" type="checkbox"
+              class="w-5 h-5 rounded-md text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 cursor-pointer" />
           </div>
         </div>
 
         <!-- Modal Footer -->
-        <div class="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3 bg-gray-50/50 dark:bg-gray-900/50">
-          <button
-            type="button"
+        <div
+          class="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3 bg-gray-50/50 dark:bg-gray-900/50">
+          <button type="button"
             class="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
-            @click="isItemModalOpen = false"
-          >
+            @click="isItemModalOpen = false">
             Cancel
           </button>
 
-          <button
-            type="button"
-            :disabled="isSubmitting"
+          <button type="button" :disabled="isSubmitting"
             class="px-5 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
-            @click="handleSaveItem"
-          >
+            @click="handleSaveItem">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <span>{{ isEditing ? 'Save Changes' : 'Create Dish' }}</span>
           </button>

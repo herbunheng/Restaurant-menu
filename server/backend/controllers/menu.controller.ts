@@ -151,7 +151,7 @@ export async function createMenuItemController(c: Context<AppEnv>) {
 
   let price = Number(body.price);
   if (hasVariants && variants.length > 0) {
-    price = Math.min(...variants.map((v) => v.price));
+    price = Math.min(...variants.map((v: any) => v.price));
   }
 
   if (isNaN(price) || price < 0) {
