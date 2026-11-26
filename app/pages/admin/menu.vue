@@ -415,7 +415,7 @@ async function handleDeleteCategory(cat: Category) {
 }
 
 function formatRiel(usd: number): string {
-  return (usd * 4100).toLocaleString('en-US');
+  return Math.round(usd * 4000).toLocaleString('en-US');
 }
 </script>
 

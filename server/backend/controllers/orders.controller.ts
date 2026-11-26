@@ -588,7 +588,7 @@ export async function getDailyReportController(c: Context<AppEnv>) {
   cashUSD = Number(cashUSD.toFixed(2));
   khqrUSD = Number(khqrUSD.toFixed(2));
   cardUSD = Number(cardUSD.toFixed(2));
-  const totalRevenueKHR = Math.round(totalRevenueUSD * 4100);
+  const totalRevenueKHR = Math.round(totalRevenueUSD * 4000);
 
   const topSellingItems = Array.from(itemMap.values())
     .sort((a, b) => b.totalQuantity - a.totalQuantity)

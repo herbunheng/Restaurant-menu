@@ -21,7 +21,7 @@ const recentDishes = computed(() => menuData.value?.slice(0, 6) || []);
 const successLogsCount = computed(() => logsData.value?.filter((l) => l.status === 'SUCCESS').length || 0);
 
 function formatRiel(usd: number): string {
-  return (usd * 4100).toLocaleString('en-US');
+  return Math.round(usd * 4000).toLocaleString('en-US');
 }
 </script>
 

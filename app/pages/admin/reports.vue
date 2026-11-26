@@ -36,7 +36,7 @@ const avgTicket = computed(() => {
 });
 
 function formatRiel(usd: number): string {
-  return Math.round(usd * 4100).toLocaleString('en-US');
+  return Math.round(usd * 4000).toLocaleString('en-US');
 }
 
 function handlePrint() {

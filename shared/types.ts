@@ -1,6 +1,29 @@
 import { z } from 'zod';
 
 /**
+ * Currency & Exchange Rate Configuration
+ * ហាងប្រើប្រាស់អត្រាប្តូរប្រាក់ $1 = 4,000 ៛ ជាស្តង់ដារ
+ */
+export const DEFAULT_EXCHANGE_RATE = 4000;
+
+export function convertUsdToKhr(usd: number, rate: number = DEFAULT_EXCHANGE_RATE): number {
+  return Math.round((Number(usd) || 0) * rate);
+}
+
+export function convertKhrToUsd(khr: number, rate: number = DEFAULT_EXCHANGE_RATE): number {
+  if (!rate || rate <= 0) return 0;
+  return Number(((Number(khr) || 0) / rate).toFixed(2));
+}
+
+export function formatRiel(usd: number, rate: number = DEFAULT_EXCHANGE_RATE): string {
+  return convertUsdToKhr(usd, rate).toLocaleString('en-US');
+}
+
+export function formatKhrAmount(khr: number): string {
+  return Math.round(Number(khr) || 0).toLocaleString('en-US');
+}
+
+/**
  * Zod Schema for API Response wrapper
  */
 export const ApiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
