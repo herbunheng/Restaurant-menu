@@ -1227,17 +1227,22 @@ function handlePrint() {
                 {{ item.name }}
               </h3>
 
-              <div class="flex items-baseline justify-between">
-                <span class="text-sm font-black text-primary-600 dark:text-primary-400">
+              <div class="flex items-baseline justify-between gap-1">
+                <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   <template v-if="item.hasVariants && item.variants && item.variants.length > 0">
-                    ${{Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2)}}+
+                    {{ formatRiel(Math.min(...item.variants.map((v) => Number(v.price)))) }} ៛+
+                  </template>
+                  <template v-else>
+                    {{ formatRiel(Number(item.price)) }} ៛
+                  </template>
+                </span>
+                <span class="text-[10px] text-gray-400 font-mono shrink-0">
+                  <template v-if="item.hasVariants && item.variants && item.variants.length > 0">
+                    ${{ Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2) }}+
                   </template>
                   <template v-else>
                     ${{ Number(item.price).toFixed(2) }}
                   </template>
-                </span>
-                <span class="text-[10px] text-gray-400 font-mono">
-                  ~{{ formatRiel(Number(item.price)) }} ៛
                 </span>
               </div>
             </div>
@@ -1425,11 +1430,11 @@ function handlePrint() {
                     class="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/60 dark:border-primary-800/60">
                     {{ item.variantLabel }}
                   </span>
-                  <span class="text-[11px] font-bold text-gray-600 dark:text-gray-300 font-mono">
-                    ${{ item.price.toFixed(2) }}
+                  <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                    {{ formatRiel(item.price) }} ៛
                   </span>
                   <span class="text-[10px] text-gray-400 font-mono">
-                    (~{{ formatRiel(item.price) }}៛)
+                    (${{ item.price.toFixed(2) }})
                   </span>
                 </div>
               </div>
@@ -1456,11 +1461,14 @@ function handlePrint() {
                 </button>
               </div>
 
-              <!-- Item Subtotal -->
+              <!-- Item Subtotal (បង្ហាញលុយរៀលជាចម្បង) -->
               <div class="text-right">
                 <span class="text-[10px] text-gray-400 mr-1 font-medium">សរុប:</span>
-                <span class="text-sm font-black text-primary-600 dark:text-primary-400 font-mono">
-                  ${{ item.subtotal.toFixed(2) }}
+                <span class="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                  {{ formatRiel(item.subtotal) }} ៛
+                </span>
+                <span class="text-[10px] text-gray-400 font-mono ml-1">
+                  (${{ item.subtotal.toFixed(2) }})
                 </span>
               </div>
             </div>
@@ -1604,12 +1612,12 @@ function handlePrint() {
                 {{ v.label }}
               </span>
               <span class="block text-[11px] text-gray-400 font-mono">
-                ~{{ formatRiel(Number(v.price)) }} ៛
+                ${{ Number(v.price).toFixed(2) }}
               </span>
             </div>
 
-            <span class="text-base font-black text-primary-600 dark:text-primary-400 font-mono">
-              ${{ Number(v.price).toFixed(2) }}
+            <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              {{ formatRiel(Number(v.price)) }} ៛
             </span>
           </button>
         </div>
@@ -2281,7 +2289,7 @@ function handlePrint() {
           <div class="min-w-0 flex-1">
             <p class="text-xs font-bold text-blue-900 dark:text-blue-200">ទូទាត់តាមកាតធនាគារ</p>
             <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
-              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន ${{ totalAmount.toFixed(2) }} មុននឹងចុចបញ្ជាក់។
+              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន <strong class="font-mono text-sm text-blue-950 dark:text-blue-100">{{ formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }}) មុននឹងចុចបញ្ជាក់។
             </p>
           </div>
         </div>
@@ -2295,8 +2303,8 @@ function handlePrint() {
               <img :src="currentSelectedPaymentMethodObj.qrImageUrl" :alt="currentSelectedPaymentMethodObj.name"
                 class="max-h-48 w-auto object-contain rounded-xl mx-auto" />
             </div>
-            <p class="text-[11px] font-bold text-sky-800 dark:text-sky-300">
-              ស្កេនទូទាត់ទឹកប្រាក់ ${{ totalAmount.toFixed(2) }} (≈ {{ formatRiel(totalAmount) }} ៛)
+            <p class="text-xs font-bold text-sky-800 dark:text-sky-300">
+              ស្កេនទូទាត់ទឹកប្រាក់ <span class="font-mono text-base font-black text-sky-950 dark:text-sky-100">{{ formatRiel(totalAmount) }} ៛</span> (≈ ${{ totalAmount.toFixed(2) }})
             </p>
           </div>
 
