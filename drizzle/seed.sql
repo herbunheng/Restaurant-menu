@@ -29,9 +29,6 @@ INSERT OR REPLACE INTO `audit_logs` (`id`, `action`, `entity`, `entity_id`, `use
 ('log_002', 'LOGIN_SUCCESS', 'auth', 'sys_001', 'system', 'admin@yourdomain.com', 'super_admin', '127.0.0.1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Super Admin logged in successfully', 'SUCCESS', strftime('%s', 'now') * 1000 - 43200000),
 ('log_003', 'UPDATE_SETTING', 'site_settings', 'default', 'system', 'admin@yourdomain.com', 'super_admin', '127.0.0.1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Updated site configuration branding and support email', 'SUCCESS', strftime('%s', 'now') * 1000 - 21600000);
 
--- 5. SEED VISITOR_ANALYTICS TABLE (Empty by default for clean tracking)
--- 6. SEED CUSTOM_EVENTS TABLE (Empty by default for clean tracking)
-
 -- 7. SEED CATEGORIES TABLE
 INSERT OR REPLACE INTO `categories` (`id`, `name`, `description`, `sort_order`, `created_at`) VALUES
 ('cat_main', 'Main Course (ម្ហូបកុម្ម៉ង់)', 'Signature authentic Khmer and Asian main dishes', 1, strftime('%s', 'now') * 1000),

@@ -12,7 +12,6 @@ import { usersRouter } from './routes/users';
 import { superAdminsRouter } from './routes/super_admins';
 import { settingsRouter } from './routes/settings';
 import { auditLogsRouter } from './routes/audit_logs';
-import { analyticsRouter } from './routes/analytics';
 import { pushRouter } from './routes/push';
 import { categoriesRouter } from './routes/categories';
 import { menuRouter } from './routes/menu';
@@ -52,8 +51,6 @@ export function createApp() {
   app.use('/api/super-admins/*', requireRole('super_admin')); // Strictly Super Admin only
   app.use('/api/settings/*', requireRole('admin', 'super_admin'));
   app.use('/api/audit-logs/*', requireRole('admin', 'super_admin'));
-  app.use('/api/analytics/summary', requireRole('admin', 'super_admin'));
-  app.use('/api/metrics/summary', requireRole('admin', 'super_admin'));
 
   // Mount API Routers
   app.route('/api/health', healthRouter);
@@ -63,8 +60,6 @@ export function createApp() {
   app.route('/api/super-admins', superAdminsRouter);
   app.route('/api/settings', settingsRouter);
   app.route('/api/audit-logs', auditLogsRouter);
-  app.route('/api/analytics', analyticsRouter);
-  app.route('/api/metrics', analyticsRouter); // AdBlocker-friendly alias to prevent (blocked:other)
   app.route('/api/push', pushRouter);
   app.route('/api/categories', categoriesRouter);
   app.route('/api/menu', menuRouter);
