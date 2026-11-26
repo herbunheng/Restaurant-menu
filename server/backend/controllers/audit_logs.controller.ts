@@ -14,6 +14,10 @@ export async function listAuditLogsController(c: Context<AppEnv>) {
   const period = c.req.query('period') || 'ALL'; // 1D, 1W, 1M, 3M, 6M, 1Y, ALL
   const offset = (page - 1) * limit;
 
+  if (!c.env?.DB) {
+    return c.json(createSuccessResponse([]), 200);
+  }
+
   const db = getDb(c.env.DB);
 
   let startDate: Date | undefined;

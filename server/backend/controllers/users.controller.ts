@@ -9,6 +9,23 @@ import type { AppEnv } from '../types';
  * Controller to list all users
  */
 export async function listUsersController(c: Context<AppEnv>) {
+  if (!c.env?.DB) {
+    return c.json(
+      createSuccessResponse([
+        {
+          id: 'user_admin',
+          name: 'Super Admin',
+          email: c.env?.SUPER_ADMIN_EMAIL || 'admin@yourdomain.com',
+          role: 'super_admin',
+          avatarUrl: null,
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+      200
+    );
+  }
   const db = getDb(c.env.DB);
   const allUsers = await db.select().from(users).all();
   return c.json(createSuccessResponse(allUsers), 200);

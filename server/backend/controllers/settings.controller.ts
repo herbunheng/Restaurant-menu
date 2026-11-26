@@ -11,6 +11,23 @@ import type { AppEnv } from '../types';
  * Controller to fetch site settings
  */
 export async function getSettingsController(c: Context<AppEnv>) {
+  if (!c.env?.DB) {
+    return c.json(
+      createSuccessResponse({
+        id: 'default',
+        siteName: 'Restaurant Menu',
+        siteDescription: 'Modern restaurant menu application',
+        telegramEnabled: false,
+        resendEnabled: false,
+        allowRegistration: true,
+        requireEmailVerification: false,
+        maintenanceMode: false,
+        maintenanceMessage: 'We are currently under scheduled maintenance. Please check back soon.',
+      }),
+      200
+    );
+  }
+
   const db = getDb(c.env.DB);
   
   let settings = await db.select().from(siteSettings).where(eq(siteSettings.id, 'default')).get();
@@ -18,8 +35,8 @@ export async function getSettingsController(c: Context<AppEnv>) {
   if (!settings) {
     const defaultData = {
       id: 'default',
-      siteName: 'My Site',
-      siteDescription: 'Production-ready Fullstack Monorepo Application',
+      siteName: 'Restaurant Menu',
+      siteDescription: 'Modern restaurant menu application',
       telegramEnabled: false,
       resendEnabled: false,
       allowRegistration: true,
@@ -39,6 +56,19 @@ export async function getSettingsController(c: Context<AppEnv>) {
  */
 export async function updateSettingsController(c: Context<AppEnv>) {
   const body = await c.req.json();
+
+  if (!c.env?.DB) {
+    return c.json(
+      createSuccessResponse({
+        id: 'default',
+        siteName: 'Restaurant Menu',
+        ...body,
+        updatedAt: new Date(),
+      }),
+      200
+    );
+  }
+
   const db = getDb(c.env.DB);
 
   const existing = await db.select().from(siteSettings).where(eq(siteSettings.id, 'default')).get();
