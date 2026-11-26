@@ -352,3 +352,28 @@ export const VisitorAnalyticsSummarySchema = z.object({
 
 export type VisitorAnalyticsSummary = z.infer<typeof VisitorAnalyticsSummarySchema>;
 
+/**
+ * Cloudinary Media Upload Schemas & Types
+ */
+export const CloudinaryUploadResponseSchema = z.object({
+  publicId: z.string(),
+  url: z.string().url(),
+  resourceType: z.enum(['image', 'video', 'raw']).or(z.string()),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  pages: z.number().nullable().optional(),
+  duration: z.number().nullable().optional(),
+  format: z.string(),
+  bytes: z.number(),
+  createdAt: z.string(),
+});
+
+export type CloudinaryUploadResponse = z.infer<typeof CloudinaryUploadResponseSchema>;
+
+export interface UploadOptions {
+  folder?: string;
+  field?: 'image' | 'file' | 'pdf' | 'video' | 'document';
+  apiKey?: string;
+  onProgress?: (percent: number) => void;
+}
+

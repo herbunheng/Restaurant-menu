@@ -36,8 +36,13 @@ export default defineNuxtConfig({
 
   // Runtime Configuration exposed to Vue components via useRuntimeConfig()
   runtimeConfig: {
+    apiUploadImg: process.env.NUXT_API_UPLOAD_IMG || "",
+    apiUploadKey: process.env.API_KEY || process.env.NUXT_API_UPLOAD_KEY || "",
+    apiBypassKey: process.env.API_BYPASS_KEY || "",
     public: {
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || "",
+      apiUploadImg: process.env.NUXT_API_UPLOAD_IMG || process.env.NUXT_PUBLIC_API_UPLOAD_IMG || "",
+      apiUploadKey: process.env.API_KEY || process.env.NUXT_API_UPLOAD_KEY || "",
       siteUrl:
         process.env.NUXT_PUBLIC_SITE_URL &&
         process.env.NUXT_PUBLIC_SITE_URL !== "http://localhost:3000"
