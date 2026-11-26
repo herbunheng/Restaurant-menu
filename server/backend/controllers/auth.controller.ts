@@ -110,24 +110,60 @@ export async function registerController(c: Context<AppEnv>) {
   );
 }
 
+function cleanStr(val: unknown): string {
+  if (typeof val !== "string") return "";
+  return val.trim().replace(/^["']|["']$/g, "");
+}
+
 /**
  * Controller for User & Super Admin Login
  */
 export async function loginController(c: Context<AppEnv>) {
-  const jwtSecret = c.env.JWT_SECRET || process.env.JWT_SECRET || "dev_secret_key_change_in_production";
+  const jwtSecret = cleanStr(c.env.JWT_SECRET || process.env.JWT_SECRET || "dev_secret_key_change_in_production");
   const body = await c.req.json();
 
-  const envSuperAdminEmail = c.env.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL || c.env.INITIAL_ADMIN_EMAIL || "admin@yourdomain.com";
-  const envSuperAdminPassword = c.env.SUPER_ADMIN_PASSWORD || process.env.SUPER_ADMIN_PASSWORD || c.env.INITIAL_ADMIN_PASSWORD || "YourSecurePassword123!";
-  const envSuperAdminName = c.env.SUPER_ADMIN_NAME || process.env.SUPER_ADMIN_NAME || c.env.INITIAL_ADMIN_NAME || "Super Admin";
+  const inputEmail = cleanStr(body.email).toLowerCase();
+  const inputPassword = cleanStr(body.password);
+
+  const envSuperAdminEmail = cleanStr(c.env.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL || c.env.INITIAL_ADMIN_EMAIL || "admin@yourdomain.com").toLowerCase();
+  const envSuperAdminPassword = cleanStr(c.env.SUPER_ADMIN_PASSWORD || process.env.SUPER_ADMIN_PASSWORD || c.env.INITIAL_ADMIN_PASSWORD || "YourSecurePassword123!");
+  const envSuperAdminName = cleanStr(c.env.SUPER_ADMIN_NAME || process.env.SUPER_ADMIN_NAME || c.env.INITIAL_ADMIN_NAME || "Super Admin");
+
+  const sampleAccounts = [
+    {
+      id: "usr_super_admin",
+      name: envSuperAdminName,
+      email: envSuperAdminEmail,
+      password: envSuperAdminPassword,
+      role: "super_admin" as const,
+    },
+    {
+      id: "usr_admin_01",
+      name: "Jane Manager",
+      email: "manager@admin.com",
+      password: "UserPassword123!",
+      role: "admin" as const,
+    },
+    {
+      id: "usr_user_01",
+      name: "John Doe",
+      email: "john@example.com",
+      password: "UserPassword123!",
+      role: "user" as const,
+    },
+  ];
 
   if (!c.env.DB) {
-    if (body.email === envSuperAdminEmail && body.password === envSuperAdminPassword) {
-      const superAdminUser = {
-        id: "usr_super_admin_dev",
-        name: envSuperAdminName,
-        email: envSuperAdminEmail,
-        role: "super_admin" as const,
+    const matched = sampleAccounts.find(
+      (a) => a.email.toLowerCase() === inputEmail && a.password === inputPassword
+    );
+
+    if (matched) {
+      const userPayload = {
+        id: matched.id,
+        name: matched.name,
+        email: matched.email,
+        role: matched.role,
         avatarUrl: null,
         status: "active" as const,
         createdAt: new Date(),
@@ -136,9 +172,9 @@ export async function loginController(c: Context<AppEnv>) {
 
       const rawToken = await sign(
         {
-          id: superAdminUser.id,
-          email: superAdminUser.email,
-          role: superAdminUser.role,
+          id: userPayload.id,
+          email: userPayload.email,
+          role: userPayload.role,
           exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
         },
         jwtSecret
@@ -157,11 +193,12 @@ export async function loginController(c: Context<AppEnv>) {
       return c.json(
         createSuccessResponse({
           token,
-          user: superAdminUser,
+          user: userPayload,
         }),
         200
       );
     }
+
     return c.json(
       createErrorResponse("INVALID_CREDENTIALS", "Invalid email or password"),
       401
@@ -173,8 +210,8 @@ export async function loginController(c: Context<AppEnv>) {
   if (
     envSuperAdminEmail &&
     envSuperAdminPassword &&
-    body.email === envSuperAdminEmail &&
-    body.password === envSuperAdminPassword
+    inputEmail === envSuperAdminEmail &&
+    inputPassword === envSuperAdminPassword
   ) {
     // Find or auto-provision Super Admin in D1
     let user = await db
