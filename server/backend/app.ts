@@ -14,6 +14,8 @@ import { settingsRouter } from './routes/settings';
 import { auditLogsRouter } from './routes/audit_logs';
 import { analyticsRouter } from './routes/analytics';
 import { pushRouter } from './routes/push';
+import { categoriesRouter } from './routes/categories';
+import { menuRouter } from './routes/menu';
 import type { AppEnv } from './types';
 
 export function createApp() {
@@ -64,6 +66,8 @@ export function createApp() {
   app.route('/api/analytics', analyticsRouter);
   app.route('/api/metrics', analyticsRouter); // AdBlocker-friendly alias to prevent (blocked:other)
   app.route('/api/push', pushRouter);
+  app.route('/api/categories', categoriesRouter);
+  app.route('/api/menu', menuRouter);
 
   // Root Endpoint
   app.get('/', (c) => {

@@ -32,3 +32,17 @@ INSERT OR REPLACE INTO `audit_logs` (`id`, `action`, `entity`, `entity_id`, `use
 -- 5. SEED VISITOR_ANALYTICS TABLE (Empty by default for clean tracking)
 -- 6. SEED CUSTOM_EVENTS TABLE (Empty by default for clean tracking)
 
+-- 7. SEED CATEGORIES TABLE
+INSERT OR REPLACE INTO `categories` (`id`, `name`, `description`, `sort_order`, `created_at`) VALUES
+('cat_main', 'Main Course (ម្ហូបកុម្ម៉ង់)', 'Signature authentic Khmer and Asian main dishes', 1, strftime('%s', 'now') * 1000),
+('cat_soup', 'Soups & Curries (ស៊ុប & សម្ល)', 'Traditional aromatic soups and coconut curries', 2, strftime('%s', 'now') * 1000),
+('cat_drinks', 'Beverages (ភេសជ្ជៈ)', 'Fresh juices, smoothies, and authentic Khmer coffees', 3, strftime('%s', 'now') * 1000),
+('cat_desserts', 'Desserts (បង្អែម)', 'Traditional Khmer sweet desserts and tropical fruits', 4, strftime('%s', 'now') * 1000);
+
+-- 8. SEED MENU_ITEMS TABLE
+INSERT OR REPLACE INTO `menu_items` (`id`, `name`, `category_id`, `price`, `currency`, `image_url`, `description`, `is_available`, `created_at`, `updated_at`) VALUES
+('item_01', 'Beef Lok Lak (ឡុកឡាក់សាច់គោ)', 'cat_main', 6.5, 'USD', 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80', 'Tender stir-fried beef served with fresh lettuce, tomatoes, cucumbers, and black pepper lime dipping sauce.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
+('item_02', 'Fish Amok (អាម៉ុកត្រី)', 'cat_soup', 5.5, 'USD', 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=600&q=80', 'Traditional Khmer steamed fish curry in banana leaf with coconut milk and kroeung paste.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
+('item_03', 'Khmer Iced Coffee with Milk (កាហ្វេទឹកដោះគោទឹកកក)', 'cat_drinks', 2.0, 'USD', 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80', 'Rich dark drip coffee brewed with sweetened condensed milk and served over crushed ice.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
+('item_04', 'Mango Sticky Rice (បាយដំណើបស្វាយ)', 'cat_desserts', 3.5, 'USD', 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=600&q=80', 'Sweet sticky coconut rice served with ripe sweet mango slices and toasted sesame seeds.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000);
+

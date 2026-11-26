@@ -4,3 +4,4 @@ export * from './site_settings';
 export * from './audit_logs';
 export * from './visitor_analytics';
 export * from './push_subscriptions';
+export * from './menu';

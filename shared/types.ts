@@ -377,3 +377,55 @@ export interface UploadOptions {
   onProgress?: (percent: number) => void;
 }
 
+/**
+ * Category & Menu Item Schemas & Types
+ */
+export const CategorySchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Category name is required'),
+  description: z.string().nullable().optional(),
+  sortOrder: z.number().default(0),
+  createdAt: z.union([z.date(), z.string()]).nullable().optional(),
+});
+
+export type Category = z.infer<typeof CategorySchema>;
+
+export const CreateCategoryInputSchema = z.object({
+  name: z.string().min(1, 'Category name is required'),
+  description: z.string().optional(),
+  sortOrder: z.number().optional().default(0),
+});
+
+export type CreateCategoryInput = z.infer<typeof CreateCategoryInputSchema>;
+
+export const MenuItemSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Item name is required'),
+  categoryId: z.string().nullable().optional(),
+  price: z.number().min(0, 'Price must be positive'),
+  currency: z.string().default('USD'),
+  imageUrl: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  isAvailable: z.boolean().default(true),
+  createdAt: z.union([z.date(), z.string()]).nullable().optional(),
+  updatedAt: z.union([z.date(), z.string()]).nullable().optional(),
+  categoryName: z.string().optional(),
+});
+
+export type MenuItem = z.infer<typeof MenuItemSchema>;
+
+export const CreateMenuItemInputSchema = z.object({
+  name: z.string().min(1, 'Item name is required'),
+  categoryId: z.string().nullable().optional(),
+  price: z.coerce.number().min(0, 'Price must be at least 0'),
+  currency: z.string().optional().default('USD'),
+  imageUrl: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  isAvailable: z.boolean().optional().default(true),
+});
+
+export type CreateMenuItemInput = z.infer<typeof CreateMenuItemInputSchema>;
+
+export const UpdateMenuItemInputSchema = CreateMenuItemInputSchema.partial();
+export type UpdateMenuItemInput = z.infer<typeof UpdateMenuItemInputSchema>;
+

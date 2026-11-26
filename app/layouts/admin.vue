@@ -6,6 +6,7 @@ const isMobileMenuOpen = ref(false);
 
 const adminNav = [
   { label: 'Overview', icon: 'i-heroicons-chart-pie', to: '/admin' },
+  { label: 'Menu & Categories', icon: 'i-heroicons-book-open', to: '/admin/menu' },
   { label: 'Analytics', icon: 'i-heroicons-chart-bar-square', to: '/admin/analytics' },
   { label: 'Users & Roles', icon: 'i-heroicons-users', to: '/admin/users' },
   { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/logs' },
