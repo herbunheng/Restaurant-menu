@@ -78,11 +78,13 @@ const menuMap = computed(() => {
   return map;
 });
 
-// Active Tables Dictionary: tableNumber -> Order
+// Active Tables Dictionary: tableNumber -> Order (រក្សាទុក Order ថ្មីបំផុតចៀសវាងការសរសេរជាន់លើ)
 const activeTablesMap = computed(() => {
   const map = new Map<string, Order>();
   for (const o of activeOrders.value) {
-    map.set(o.tableNumber, o);
+    if (!map.has(o.tableNumber)) {
+      map.set(o.tableNumber, o);
+    }
   }
   return map;
 });
@@ -216,7 +218,56 @@ watch([currentSelectedTableName, activeOrders], () => {
   syncTableOrder();
 }, { immediate: true });
 
+// តាមដានថាមានមុខម្ហូបបន្ថែមថ្មីដែលមិនទាន់បានចុច "ថែមម្ហូប" ឬអត់
+const hasUnsavedChanges = computed(() => {
+  if (!isCurrentTableOccupied.value || !currentActiveOrder.value) return false;
+  const originalItems = currentActiveOrder.value.items || [];
+  if (cart.value.length !== originalItems.length) return true;
+  for (const item of cart.value) {
+    const orig = originalItems.find(
+      (o) => o.menuItemId === item.menuItemId && (o.variantLabel || '') === (item.variantLabel || '')
+    );
+    if (!orig || orig.quantity !== item.quantity) return true;
+  }
+  return false;
+});
+
+// កំណត់ស្ថានភាពមុខម្ហូបនីមួយៗ (មុខម្ហូបចាស់បានផ្ញើរួច vs ថែមថ្មី)
+function getItemStatus(item: OrderItem): { status: 'saved' | 'new' | 'modified'; diffQty: number } {
+  if (!isCurrentTableOccupied.value || !currentActiveOrder.value) {
+    return { status: 'new', diffQty: item.quantity };
+  }
+  const original = currentActiveOrder.value.items?.find(
+    (o) => o.menuItemId === item.menuItemId && (o.variantLabel || '') === (item.variantLabel || '')
+  );
+  if (!original) {
+    return { status: 'new', diffQty: item.quantity };
+  }
+  if (item.quantity > original.quantity) {
+    return { status: 'modified', diffQty: item.quantity - original.quantity };
+  }
+  return { status: 'saved', diffQty: 0 };
+}
+
 function handleSelectTable(t: string) {
+  if (t === currentSelectedTableName.value) return;
+  if (hasUnsavedChanges.value) {
+    openConfirmDialog({
+      type: 'hold',
+      title: 'មានមុខម្ហូបមិនទាន់រក្សាទុក',
+      message: `${currentSelectedTableName.value} មានការថែមមុខម្ហូបដែលមិនទាន់បានចុច "ថែមម្ហូប"។ តើអ្នកចង់ប្តូរតុដោយបោះបង់ការកែប្រែនេះមែនទេ?`,
+      confirmText: 'បោះបង់ & ប្តូរតុ',
+      details: {
+        name: `តុបច្ចុប្បន្ន៖ ${currentSelectedTableName.value}`,
+        subtext: `មុខម្ហូបថ្មីមិនទាន់បានផ្ញើទៅផ្ទះបាយ`,
+      },
+      onConfirm: () => {
+        selectedTable.value = t;
+        customTableInput.value = '';
+      },
+    });
+    return;
+  }
   selectedTable.value = t;
   customTableInput.value = '';
 }
@@ -624,26 +675,6 @@ function selectVariantAndAdd(label: string, price: number) {
 }
 
 function addItemToCart(menuItemId: string, name: string, variantLabel: string, price: number) {
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    // តុដែលបានរក្សាទុក (Hold / តុជាប់) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
-    openConfirmDialog({
-      type: 'add',
-      title: 'បញ្ជាក់ការបន្ថែមមុខម្ហូប',
-      message: `តើអ្នកពិតជាចង់បន្ថែមមុខម្ហូប "${name}" ចូលក្នុង ${table} មែនទេ?`,
-      confirmText: 'យល់ព្រមបន្ថែម',
-      details: {
-        name: name + (variantLabel ? ` (${variantLabel})` : ''),
-        subtext: `តម្លៃ៖ $${price.toFixed(2)} • តុ៖ ${table}`,
-      },
-      onConfirm: () => {
-        executeAddItemToCart(menuItemId, name, variantLabel, price);
-      },
-    });
-    return;
-  }
-
   executeAddItemToCart(menuItemId, name, variantLabel, price);
 }
 
@@ -669,51 +700,6 @@ function executeAddItemToCart(menuItemId: string, name: string, variantLabel: st
 }
 
 function updateQuantity(index: number, delta: number) {
-  const item = cart.value[index];
-  if (!item) return;
-
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    // ករណីតុដែលបានរក្សាទុក (Hold) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
-    if (delta < 0) {
-      // ករណីដក / បន្ថយ
-      const isWillDelete = item.quantity + delta <= 0;
-      openConfirmDialog({
-        type: 'remove',
-        title: isWillDelete ? 'បញ្ជាក់ការដកមុខម្ហូបចេញ' : 'បញ្ជាក់ការបន្ថយចំនួន',
-        message: isWillDelete
-          ? `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`
-          : `តើអ្នកពិតជាចង់បន្ថយចំនួន "${item.name}" ពី ${item.quantity} មកនៅត្រឹម ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
-        confirmText: isWillDelete ? 'យល់ព្រមដកចេញ' : 'យល់ព្រមបន្ថយ',
-        details: {
-          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-          subtext: `តុ៖ ${table} • បរិមាណបច្ចុប្បន្ន៖ ${item.quantity}`,
-        },
-        onConfirm: () => {
-          executeQuantityChange(index, delta);
-        },
-      });
-      return;
-    } else if (delta > 0) {
-      // ករណីបន្ថែមចំនួន
-      openConfirmDialog({
-        type: 'add',
-        title: 'បញ្ជាក់ការបន្ថែមចំនួន',
-        message: `តើអ្នកពិតជាចង់បន្ថែមចំនួន "${item.name}" ពី ${item.quantity} ទៅ ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
-        confirmText: 'យល់ព្រមបន្ថែម',
-        details: {
-          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-          subtext: `តុ៖ ${table} • បរិមាណថ្មី៖ ${item.quantity + delta}`,
-        },
-        onConfirm: () => {
-          executeQuantityChange(index, delta);
-        },
-      });
-      return;
-    }
-  }
-
   executeQuantityChange(index, delta);
 }
 
@@ -730,28 +716,6 @@ function executeQuantityChange(index: number, delta: number) {
 }
 
 function handleRemoveItem(index: number) {
-  const item = cart.value[index];
-  if (!item) return;
-
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    openConfirmDialog({
-      type: 'remove',
-      title: 'បញ្ជាក់ការដកមុខម្ហូបចេញ',
-      message: `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`,
-      confirmText: 'យល់ព្រមដកចេញ',
-      details: {
-        name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-        subtext: `តុ៖ ${table} • បរិមាណ៖ ${item.quantity}`,
-      },
-      onConfirm: () => {
-        cart.value.splice(index, 1);
-      },
-    });
-    return;
-  }
-
   cart.value.splice(index, 1);
 }
 
@@ -761,19 +725,25 @@ function clearCart() {
   const table = currentSelectedTableName.value;
   openConfirmDialog({
     type: 'remove',
-    title: 'សម្អាតបញ្ជីកុម្ម៉ង់',
+    title: isCurrentTableOccupied.value ? 'ត្រឡប់ទៅមុខម្ហូបដើម' : 'សម្អាតបញ្ជីកុម្ម៉ង់',
     message: isCurrentTableOccupied.value
-      ? `តើអ្នកពិតជាចង់លុបសម្អាតមុខម្ហូបទាំងអស់ចេញពីកន្ត្រកនៃ ${table} មែនទេ?`
+      ? `តើអ្នកពិតជាចង់បោះបង់មុខម្ហូបដែលទើបថែម និងត្រឡប់ទៅមុខម្ហូបដើមដែលបានកត់ទុកសម្រាប់ ${table} វិញមែនទេ?`
       : 'តើអ្នកពិតជាចង់សម្អាតមុខម្ហូបទាំងអស់ក្នុងកន្ត្រកនេះមែនទេ?',
-    confirmText: 'យល់ព្រមសម្អាត',
+    confirmText: isCurrentTableOccupied.value ? 'យល់ព្រមត្រឡប់ដើម' : 'យល់ព្រមសម្អាត',
     details: {
       name: `${cart.value.length} មុខម្ហូបសរុប`,
       subtext: `តម្លៃសរុប៖ $${subtotal.value.toFixed(2)} • តុ៖ ${table}`,
     },
     onConfirm: () => {
-      cart.value = [];
-      discount.value = 0;
-      orderNote.value = '';
+      if (isCurrentTableOccupied.value && currentActiveOrder.value) {
+        cart.value = JSON.parse(JSON.stringify(currentActiveOrder.value.items || []));
+        discount.value = currentActiveOrder.value.discount || 0;
+        orderNote.value = currentActiveOrder.value.note || '';
+      } else {
+        cart.value = [];
+        discount.value = 0;
+        orderNote.value = '';
+      }
     },
   });
 }
@@ -1384,6 +1354,19 @@ function handlePrint() {
         </div>
       </div>
 
+      <!-- Alert Banner: Unsaved New Items Warning (ជូនដំណឹងឱ្យចុច "ថែមម្ហូប") -->
+      <div v-if="hasUnsavedChanges"
+        class="px-3.5 py-2 bg-amber-500/15 border-b border-amber-300 dark:border-amber-700/80 text-amber-900 dark:text-amber-200 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 text-amber-600 dark:text-amber-400 animate-spin shrink-0" />
+          <span class="font-bold truncate">មានមុខម្ហូបថែមថ្មីមិនទាន់រក្សាទុក</span>
+        </div>
+        <button type="button" @click="handleSavePendingOrder"
+          class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] shadow-xs cursor-pointer shrink-0 transition-transform active:scale-95">
+          ចុច "ថែមម្ហូប" ឥឡូវ
+        </button>
+      </div>
+
       <!-- Order Items List (Scrollable) -->
       <div class="flex-1 p-3 overflow-y-auto space-y-2 bg-gray-50/50 dark:bg-gray-950/30">
         <div v-if="cart.length > 0" class="space-y-2.5">
@@ -1423,8 +1406,22 @@ function handlePrint() {
                   </button>
                 </div>
 
-                <!-- Variant Badge & Unit Price -->
+                <!-- Variant Badge & Unit Price & Item Status Tag -->
                 <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <!-- Status Tag for Occupied Table -->
+                  <span v-if="isCurrentTableOccupied && getItemStatus(item).status === 'new'"
+                    class="px-1.5 py-0.2 rounded-md text-[9px] font-black bg-amber-500 text-white animate-pulse">
+                    ថែមថ្មី
+                  </span>
+                  <span v-else-if="isCurrentTableOccupied && getItemStatus(item).status === 'modified'"
+                    class="px-1.5 py-0.2 rounded-md text-[9px] font-black bg-sky-500 text-white">
+                    +{{ getItemStatus(item).diffQty }} ថ្មី
+                  </span>
+                  <span v-else-if="isCurrentTableOccupied && getItemStatus(item).status === 'saved'"
+                    class="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300/60 dark:border-emerald-800/60">
+                    បានផ្ញើរួច
+                  </span>
+
                   <span v-if="item.variantLabel"
                     class="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/60 dark:border-primary-800/60">
                     {{ item.variantLabel }}
@@ -1531,11 +1528,15 @@ function handlePrint() {
         <div v-if="isCurrentTableOccupied" class="grid grid-cols-3 gap-1.5 pt-1">
           <!-- Button 1: Save / Append Items -->
           <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
-            class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            class="py-2.5 px-1.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+            :class="hasUnsavedChanges
+              ? 'bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-300 ring-2 ring-amber-400/50 animate-pulse font-black'
+              : 'bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 font-bold'"
             title="រក្សាទុកការបន្ថែមមុខម្ហូបទៅផ្ទះបាយ" @click="handleSavePendingOrder">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-plus-circle" class="w-4 h-4" />
             <span>ថែមម្ហូប</span>
+            <span v-if="hasUnsavedChanges" class="px-1.5 py-0.2 rounded-full text-[9px] bg-white text-amber-700 font-black">ថ្មី</span>
           </button>
 
           <!-- Button 2: Pre-Bill -->
