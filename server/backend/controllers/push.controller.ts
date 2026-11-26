@@ -6,19 +6,6 @@ import { pushSubscriptions } from '../db/schema';
 import { logAudit } from '../services/audit';
 import type { AppEnv } from '../types';
 
-let latestBroadcastPayload: {
-  id: string;
-  title: string;
-  message: string;
-  url: string;
-  timestamp: string;
-} | null = null;
-
-export function setLatestBroadcastPayload(payload: typeof latestBroadcastPayload) {
-  latestBroadcastPayload = payload;
-}
-
-
 /**
  * Register/subscribe client browser Web Push endpoint & keys
  */
@@ -75,14 +62,7 @@ export async function getPushSubscribersCountController(c: Context<AppEnv>) {
   const countResult = await db.select({ count: sql<number>`count(*)` }).from(pushSubscriptions).get();
   const totalSubscribers = countResult?.count || 0;
 
-  return c.json(createSuccessResponse({ totalSubscribers, latestBroadcast: latestBroadcastPayload }), 200);
-}
-
-/**
- * Fetch latest push broadcast notification for active clients/viewers
- */
-export async function getLatestBroadcastController(c: Context<AppEnv>) {
-  return c.json(createSuccessResponse({ latestBroadcast: latestBroadcastPayload }), 200);
+  return c.json(createSuccessResponse({ totalSubscribers }), 200);
 }
 
 /**
@@ -101,15 +81,6 @@ export async function broadcastPushController(c: Context<AppEnv>) {
   const db = getDb(c.env.DB);
   const subscriptions = await db.select().from(pushSubscriptions);
 
-  // Record latest broadcast in memory payload for live client listeners
-  latestBroadcastPayload = {
-    id: crypto.randomUUID(),
-    title,
-    message,
-    url: targetUrl,
-    timestamp: new Date().toISOString(),
-  };
-
   let successCount = 0;
   let failedCount = 0;
 
@@ -125,7 +96,6 @@ export async function broadcastPushController(c: Context<AppEnv>) {
         message: 'Broadcast saved! (Note: 0 user devices are currently subscribed. Users must open /user and click "Enable Web Push Notifications" first).',
         totalTargeted: 0,
         successCount: 0,
-        latestBroadcast: latestBroadcastPayload,
       }),
       200
     );
@@ -182,7 +152,6 @@ export async function broadcastPushController(c: Context<AppEnv>) {
       message: `Push notification broadcast sent to ${subscriptions.length} registered viewer devices!`,
       totalTargeted: subscriptions.length,
       successCount,
-      latestBroadcast: latestBroadcastPayload,
     }),
     200
   );

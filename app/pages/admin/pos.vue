@@ -121,6 +121,8 @@ const activeItemForVariant = ref<MenuItem | null>(null);
 // Receipt Modal State
 const isReceiptModalOpen = ref(false);
 const lastSavedOrder = ref<Order | null>(null);
+const receiptMode = ref<'official' | 'pre_bill'>('official');
+const isPrintingPreBill = ref(false);
 
 // Split Bill Modal State
 const isSplitModalOpen = ref(false);
@@ -135,6 +137,58 @@ const splitItems = ref<{
 }[]>([]);
 const splitPaymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
 const isSubmittingSplit = ref(false);
+
+// Confirmation Dialog State (ជៀសវាងការច្រលំដៃពេល ដក រឺ បន្ថែមមុខម្ហូប)
+interface ConfirmDialogState {
+  isOpen: boolean;
+  type: 'add' | 'remove' | 'hold';
+  title: string;
+  message: string;
+  confirmText?: string;
+  details?: {
+    name: string;
+    subtext?: string;
+  };
+  onConfirm: () => void;
+}
+
+const confirmDialog = ref<ConfirmDialogState>({
+  isOpen: false,
+  type: 'hold',
+  title: '',
+  message: '',
+  confirmText: 'យល់ព្រម',
+  onConfirm: () => {},
+});
+
+function openConfirmDialog(options: {
+  type: 'add' | 'remove' | 'hold';
+  title: string;
+  message: string;
+  confirmText?: string;
+  details?: {
+    name: string;
+    subtext?: string;
+  };
+  onConfirm: () => void;
+}) {
+  confirmDialog.value = {
+    isOpen: true,
+    type: options.type,
+    title: options.title,
+    message: options.message,
+    confirmText: options.confirmText || 'យល់ព្រម',
+    details: options.details,
+    onConfirm: options.onConfirm,
+  };
+}
+
+function handleConfirmDialogAction(confirmed: boolean) {
+  if (confirmed && confirmDialog.value.onConfirm) {
+    confirmDialog.value.onConfirm();
+  }
+  confirmDialog.value.isOpen = false;
+}
 
 function openSplitModal() {
   if (!isCurrentTableOccupied.value || cart.value.length === 0) return;
@@ -209,6 +263,7 @@ async function handleConfirmSplitPay() {
 
     const data = res?.data || res;
     lastSavedOrder.value = data.paidOrder;
+    receiptMode.value = 'official';
     isSplitModalOpen.value = false;
     isReceiptModalOpen.value = true;
 
@@ -269,6 +324,30 @@ function selectVariantAndAdd(label: string, price: number) {
 }
 
 function addItemToCart(menuItemId: string, name: string, variantLabel: string, price: number) {
+  const table = currentSelectedTableName.value;
+
+  if (isCurrentTableOccupied.value) {
+    // តុដែលបានរក្សាទុក (Hold / តុជាប់) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
+    openConfirmDialog({
+      type: 'add',
+      title: 'បញ្ជាក់ការបន្ថែមមុខម្ហូប (Add Item)',
+      message: `តើអ្នកពិតជាចង់បន្ថែមមុខម្ហូប "${name}" ចូលក្នុង ${table} មែនទេ?`,
+      confirmText: 'យល់ព្រមបន្ថែម',
+      details: {
+        name: name + (variantLabel ? ` (${variantLabel})` : ''),
+        subtext: `តម្លៃ៖ $${price.toFixed(2)} • តុ៖ ${table}`,
+      },
+      onConfirm: () => {
+        executeAddItemToCart(menuItemId, name, variantLabel, price);
+      },
+    });
+    return;
+  }
+
+  executeAddItemToCart(menuItemId, name, variantLabel, price);
+}
+
+function executeAddItemToCart(menuItemId: string, name: string, variantLabel: string, price: number) {
   const existing = cart.value.find(
     (it) => it.menuItemId === menuItemId && it.variantLabel === variantLabel
   );
@@ -293,6 +372,55 @@ function updateQuantity(index: number, delta: number) {
   const item = cart.value[index];
   if (!item) return;
 
+  const table = currentSelectedTableName.value;
+
+  if (isCurrentTableOccupied.value) {
+    // ករណីតុដែលបានរក្សាទុក (Hold) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
+    if (delta < 0) {
+      // ករណីដក / បន្ថយ
+      const isWillDelete = item.quantity + delta <= 0;
+      openConfirmDialog({
+        type: 'remove',
+        title: isWillDelete ? 'បញ្ជាក់ការដកមុខម្ហូបចេញ (Remove)' : 'បញ្ជាក់ការបន្ថយចំនួន (Decrease)',
+        message: isWillDelete
+          ? `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`
+          : `តើអ្នកពិតជាចង់បន្ថយចំនួន "${item.name}" ពី ${item.quantity} មកនៅត្រឹម ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
+        confirmText: isWillDelete ? 'យល់ព្រមដកចេញ' : 'យល់ព្រមបន្ថយ',
+        details: {
+          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
+          subtext: `តុ៖ ${table} • បរិមាណបច្ចុប្បន្ន៖ ${item.quantity}`,
+        },
+        onConfirm: () => {
+          executeQuantityChange(index, delta);
+        },
+      });
+      return;
+    } else if (delta > 0) {
+      // ករណីបន្ថែមចំនួន
+      openConfirmDialog({
+        type: 'add',
+        title: 'បញ្ជាក់ការបន្ថែមចំនួន (Increase)',
+        message: `តើអ្នកពិតជាចង់បន្ថែមចំនួន "${item.name}" ពី ${item.quantity} ទៅ ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
+        confirmText: 'យល់ព្រមបន្ថែម',
+        details: {
+          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
+          subtext: `តុ៖ ${table} • បរិមាណថ្មី៖ ${item.quantity + delta}`,
+        },
+        onConfirm: () => {
+          executeQuantityChange(index, delta);
+        },
+      });
+      return;
+    }
+  }
+
+  executeQuantityChange(index, delta);
+}
+
+function executeQuantityChange(index: number, delta: number) {
+  const item = cart.value[index];
+  if (!item) return;
+
   item.quantity += delta;
   if (item.quantity <= 0) {
     cart.value.splice(index, 1);
@@ -303,11 +431,25 @@ function updateQuantity(index: number, delta: number) {
 
 function clearCart() {
   if (cart.value.length === 0) return;
-  if (confirm('តើអ្នកពិតជាចង់សម្អាតបញ្ជីកុម្ម៉ង់នេះមែនទេ? (Clear order)')) {
-    cart.value = [];
-    discount.value = 0;
-    orderNote.value = '';
-  }
+
+  const table = currentSelectedTableName.value;
+  openConfirmDialog({
+    type: 'remove',
+    title: 'សម្អាតបញ្ជីកុម្ម៉ង់ (Clear Order)',
+    message: isCurrentTableOccupied.value
+      ? `តើអ្នកពិតជាចង់លុបសម្អាតមុខម្ហូបទាំងអស់ចេញពីកន្ត្រកនៃ ${table} មែនទេ?`
+      : 'តើអ្នកពិតជាចង់សម្អាតមុខម្ហូបទាំងអស់ក្នុងកន្ត្រកនេះមែនទេ?',
+    confirmText: 'យល់ព្រមសម្អាត',
+    details: {
+      name: `${cart.value.length} មុខម្ហូបសរុប`,
+      subtext: `តម្លៃសរុប៖ $${subtotal.value.toFixed(2)} • តុ៖ ${table}`,
+    },
+    onConfirm: () => {
+      cart.value = [];
+      discount.value = 0;
+      orderNote.value = '';
+    },
+  });
 }
 
 // 1. ACTION: HOLD / APPEND ORDER (ទុកតុ / Order បន្ថែម - មិនទាន់គិតលុយ)
@@ -321,6 +463,27 @@ async function handleSavePendingOrder() {
     return;
   }
 
+  const table = currentSelectedTableName.value;
+  const isOccupied = isCurrentTableOccupied.value;
+
+  openConfirmDialog({
+    type: isOccupied ? 'add' : 'hold',
+    title: isOccupied ? 'បញ្ជាក់ការថែមម្ហូបចូលតុ' : 'បញ្ជាក់ការរក្សាទុកតុ (Hold)',
+    message: isOccupied
+      ? `តើអ្នកពិតជាចង់រក្សាទុកការបន្ថែមមុខម្ហូបចូលក្នុង ${table} និងផ្ញើទៅផ្ទះបាយមែនទេ?`
+      : `តើអ្នកពិតជាចង់រក្សាទុកការកុម្ម៉ង់សម្រាប់ ${table} (Hold Table) មែនទេ?`,
+    confirmText: isOccupied ? 'យល់ព្រមថែមម្ហូប' : 'យល់ព្រមរក្សាទុកតុ',
+    details: {
+      name: `មុខម្ហូប ${cart.value.length} មុខ (${cart.value.reduce((a, b) => a + b.quantity, 0)} ចាន)`,
+      subtext: `តម្លៃសរុប៖ $${subtotal.value.toFixed(2)} • តុ៖ ${table}`,
+    },
+    onConfirm: () => {
+      executeSavePendingOrder();
+    },
+  });
+}
+
+async function executeSavePendingOrder() {
   isSubmitting.value = true;
   const table = currentSelectedTableName.value;
 
@@ -375,7 +538,64 @@ async function handleSavePendingOrder() {
   }
 }
 
-// 2. ACTION: CHECKOUT & CLOSE TABLE (គិតលុយ & បិទតុ)
+// 2. ACTION: PRINT PRE-BILL (ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវមើល - មិនទាន់គិតលុយ)
+async function handlePrintPreBill() {
+  if (!isCurrentTableOccupied.value || !currentActiveOrder.value) {
+    toast.add({
+      title: 'មិនទាន់មានតុ',
+      description: 'សូមជ្រើសរើសតុដែលមានភ្ញៀវសិនមុននឹងចេញបុងមើល',
+      color: 'warning',
+    });
+    return;
+  }
+
+  if (cart.value.length === 0) {
+    toast.add({
+      title: 'មិនទាន់មានមុខម្ហូប',
+      description: 'តុនេះមិនទាន់មានមុខម្ហូបណាមួយត្រូវបានកុម្ម៉ង់នៅឡើយទេ',
+      color: 'warning',
+    });
+    return;
+  }
+
+  isPrintingPreBill.value = true;
+  const table = currentSelectedTableName.value;
+
+  try {
+    const res: any = await $api(`/api/orders/${currentActiveOrder.value.id}`, {
+      method: 'PUT',
+      body: {
+        items: cart.value,
+        discount: Number(discount.value) || 0,
+        paymentStatus: 'billed',
+        note: orderNote.value.trim() || '',
+      },
+    });
+
+    const saved = res?.data || res;
+    lastSavedOrder.value = saved;
+    receiptMode.value = 'pre_bill';
+    isReceiptModalOpen.value = true;
+
+    await refreshActiveOrders();
+
+    toast.add({
+      title: 'បានចេញបុងបណ្ដោះអាសន្ន!',
+      description: `តុ ${table} បានប្តូរស្ថានភាពទៅ "សុំមើលបុង" (Pre-Billed)`,
+      color: 'success',
+    });
+  } catch (err: any) {
+    toast.add({
+      title: 'បរាជ័យក្នុងការចេញបុងមើល',
+      description: err.message || 'Failed to print pre-bill',
+      color: 'error',
+    });
+  } finally {
+    isPrintingPreBill.value = false;
+  }
+}
+
+// 3. ACTION: CHECKOUT & CLOSE TABLE (គិតលុយ & បិទតុ)
 async function handleCheckout() {
   if (cart.value.length === 0) {
     toast.add({
@@ -423,6 +643,7 @@ async function handleCheckout() {
     }
 
     lastSavedOrder.value = saved;
+    receiptMode.value = 'official';
     isReceiptModalOpen.value = true;
 
     // Reset Cart
@@ -468,11 +689,14 @@ function handlePrint() {
             </h1>
 
             <div class="flex items-center gap-2 text-xs">
-              <span class="inline-flex items-center gap-1 font-bold text-emerald-600">
+              <span class="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span> តុទំនេរ (New)
               </span>
-              <span class="inline-flex items-center gap-1 font-bold text-amber-600">
-                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> តុជាប់ (ថែមមុខម្ហូប)
+              <span class="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> កំពុងញ៉ាំ
+              </span>
+              <span class="inline-flex items-center gap-1 font-bold text-purple-600 dark:text-purple-400">
+                <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span> សុំមើលបុង
               </span>
             </div>
           </div>
@@ -486,21 +710,33 @@ function handlePrint() {
               class="px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border"
               :class="[
                 currentSelectedTableName === t && !customTableInput
-                  ? 'border-primary-600 bg-primary-600 text-white shadow-xs scale-[1.02]'
-                  : activeTablesMap.has(t)
+                  ? activeTablesMap.get(t)?.paymentStatus === 'billed'
+                    ? 'border-purple-600 bg-purple-600 text-white shadow-xs scale-[1.02]'
+                    : activeTablesMap.get(t)?.paymentStatus === 'pending'
+                    ? 'border-amber-600 bg-amber-600 text-white shadow-xs scale-[1.02]'
+                    : 'border-primary-600 bg-primary-600 text-white shadow-xs scale-[1.02]'
+                  : activeTablesMap.get(t)?.paymentStatus === 'billed'
+                  ? 'border-purple-300 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 hover:bg-purple-100'
+                  : activeTablesMap.get(t)?.paymentStatus === 'pending'
                   ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100'
                   : 'border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100',
               ]"
               @click="handleSelectTable(t)"
             >
               <span>{{ t }}</span>
-              <!-- Occupied indicator -->
+              <!-- Occupied / Billed indicator -->
               <span
                 v-if="activeTablesMap.has(t)"
                 class="px-1.5 py-0.2 rounded-md text-[9px] font-black"
-                :class="currentSelectedTableName === t ? 'bg-black/30 text-white' : 'bg-amber-500 text-white'"
+                :class="[
+                  currentSelectedTableName === t
+                    ? 'bg-black/30 text-white'
+                    : activeTablesMap.get(t)?.paymentStatus === 'billed'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-amber-500 text-white',
+                ]"
               >
-                {{ activeTablesMap.get(t)?.items.length }} មុខ
+                {{ activeTablesMap.get(t)?.paymentStatus === 'billed' ? 'មើលបុង' : `${activeTablesMap.get(t)?.items.length} មុខ` }}
               </span>
             </button>
 
@@ -621,19 +857,27 @@ function handlePrint() {
 
     <!-- RIGHT SIDE: LIVE ORDER BILL / SLIP (35% width on desktop) -->
     <div class="w-full lg:w-96 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden shrink-0">
-      <!-- Order Header with Clear Active/New Mode Indicator and Split Button -->
+      <!-- Order Header with Clear Active/New Mode Indicator and Action Buttons -->
       <div
         class="p-4 border-b transition-colors flex items-center justify-between shrink-0"
         :class="[
-          isCurrentTableOccupied
-            ? 'bg-amber-500/10 border-amber-200 dark:border-amber-900/60'
-            : 'bg-emerald-500/10 border-emerald-200 dark:border-emerald-900/60',
+          !isCurrentTableOccupied
+            ? 'bg-emerald-500/10 border-emerald-200 dark:border-emerald-900/60'
+            : currentActiveOrder?.paymentStatus === 'billed'
+            ? 'bg-purple-500/10 border-purple-200 dark:border-purple-900/60'
+            : 'bg-amber-500/10 border-amber-200 dark:border-amber-900/60',
         ]"
       >
         <div class="flex items-center gap-2.5">
           <div
             class="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xs"
-            :class="isCurrentTableOccupied ? 'bg-amber-500' : 'bg-emerald-600'"
+            :class="[
+              !isCurrentTableOccupied
+                ? 'bg-emerald-600'
+                : currentActiveOrder?.paymentStatus === 'billed'
+                ? 'bg-purple-600'
+                : 'bg-amber-500',
+            ]"
           >
             {{ currentSelectedTableName.replace('តុ ', 'T') }}
           </div>
@@ -646,18 +890,29 @@ function handlePrint() {
               <span
                 class="px-2 py-0.5 rounded text-[10px] font-black uppercase"
                 :class="[
-                  isCurrentTableOccupied
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-emerald-600 text-white',
+                  !isCurrentTableOccupied
+                    ? 'bg-emerald-600 text-white'
+                    : currentActiveOrder?.paymentStatus === 'billed'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-amber-500 text-white',
                 ]"
               >
-                {{ isCurrentTableOccupied ? 'ថែមម្ហូប (Add Items)' : 'New Order' }}
+                {{
+                  !isCurrentTableOccupied
+                    ? 'New Order'
+                    : currentActiveOrder?.paymentStatus === 'billed'
+                    ? '🟣 សុំមើលបុង'
+                    : '🟡 កំពុងញ៉ាំ'
+                }}
               </span>
             </div>
 
             <p class="text-[11px] text-gray-500 font-mono mt-0.5">
               <template v-if="isCurrentTableOccupied">
                 Order #{{ currentActiveOrder?.orderNumber }} • {{ cart.length }} items
+                <span v-if="currentActiveOrder?.paymentStatus === 'billed'" class="text-purple-600 dark:text-purple-400 font-bold ml-1">
+                  (រង់ចាំលុយ)
+                </span>
               </template>
               <template v-else>
                 តុទំនេរ • ចុចរើសម្ហូបដំបូង
@@ -667,16 +922,30 @@ function handlePrint() {
         </div>
 
         <div class="flex items-center gap-1.5">
+          <!-- Pre-Bill Button (Only when occupied and has items) -->
+          <button
+            v-if="isCurrentTableOccupied && cart.length > 0"
+            type="button"
+            :disabled="isPrintingPreBill || isSubmitting"
+            class="px-2 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវមើល (Pre-Bill)"
+            @click="handlePrintPreBill"
+          >
+            <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
+            <UIcon v-else name="i-heroicons-document-text" class="w-3.5 h-3.5" />
+            <span>Pre-Bill</span>
+          </button>
+
           <!-- Split Bill Button (Only when occupied and has items) -->
           <button
             v-if="isCurrentTableOccupied && cart.length > 0"
             type="button"
-            class="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+            class="px-2 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
             title="គិតលុយបំបែកមុខម្ហូប (Split Bill)"
             @click="openSplitModal"
           >
             <UIcon name="i-heroicons-scissors" class="w-3.5 h-3.5" />
-            <span>Split Bill</span>
+            <span>Split</span>
           </button>
 
           <button
@@ -844,24 +1113,59 @@ function handlePrint() {
           </button>
         </div>
 
-        <!-- DUAL ACTIONS: 1. SAVE/HOLD TABLE vs 2. CHECKOUT & CLOSE TABLE -->
-        <div class="grid grid-cols-2 gap-2 pt-1">
-          <!-- Button 1: Hold Table / Append Items -->
+        <!-- ACTIONS: OCCUPIED (Save / Pre-Bill / Checkout) vs NEW (Hold / Checkout) -->
+        <div v-if="isCurrentTableOccupied" class="grid grid-cols-3 gap-1.5 pt-1">
+          <!-- Button 1: Save / Append Items -->
           <button
             type="button"
-            :disabled="cart.length === 0 || isSubmitting"
-            class="py-2.5 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            :class="[
-              isCurrentTableOccupied
-                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
-                : 'bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600',
-            ]"
+            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+            class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="រក្សាទុកការបន្ថែមមុខម្ហូបទៅផ្ទះបាយ"
             @click="handleSavePendingOrder"
           >
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
-            <UIcon v-else-if="isCurrentTableOccupied" name="i-heroicons-plus-circle" class="w-4 h-4" />
+            <UIcon v-else name="i-heroicons-plus-circle" class="w-4 h-4" />
+            <span>ថែមម្ហូប (Save)</span>
+          </button>
+
+          <!-- Button 2: Pre-Bill -->
+          <button
+            type="button"
+            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+            class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវផ្ទៀងផ្ទាត់ (Pre-Bill)"
+            @click="handlePrintPreBill"
+          >
+            <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
+            <UIcon v-else name="i-heroicons-document-text" class="w-4 h-4" />
+            <span>មើលបុង (Pre-Bill)</span>
+          </button>
+
+          <!-- Button 3: Checkout -->
+          <button
+            type="button"
+            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+            class="py-2.5 px-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="គិតលុយគ្រប់ចំនួន និងបិទតុ"
+            @click="handleCheckout"
+          >
+            <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
+            <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
+            <span>គិតលុយ (Pay)</span>
+          </button>
+        </div>
+
+        <div v-else class="grid grid-cols-2 gap-2 pt-1">
+          <!-- Button 1: Hold Table -->
+          <button
+            type="button"
+            :disabled="cart.length === 0 || isSubmitting"
+            class="py-2.5 px-2 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600 shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="handleSavePendingOrder"
+          >
+            <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-arrow-down-on-square" class="w-4 h-4 text-primary-500" />
-            <span>{{ isCurrentTableOccupied ? 'ថែមម្ហូប (Save)' : 'រក្សាទុកតុ (Hold)' }}</span>
+            <span>រក្សាទុកតុ (Hold)</span>
           </button>
 
           <!-- Button 2: Pay & Close Table -->
@@ -940,8 +1244,37 @@ function handlePrint() {
         <div id="receipt-print-area" class="space-y-4 text-center">
           <div>
             <h2 class="text-lg font-black text-gray-900 dark:text-white">RESTAURANT MENU</h2>
-            <p class="text-[11px] text-gray-500">Official Dining Invoice</p>
-            <p class="text-[11px] text-gray-400 font-mono mt-1">
+
+            <!-- Pre-Bill vs Official Header Badge -->
+            <div class="mt-2">
+              <div
+                v-if="receiptMode === 'pre_bill'"
+                class="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 space-y-0.5"
+              >
+                <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
+                  <UIcon name="i-heroicons-document-magnifying-glass" class="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span>វិក្កយបត្របណ្តោះអាសន្ន / PRE-BILL</span>
+                </div>
+                <p class="text-[10px] text-purple-600 dark:text-purple-300 font-semibold">
+                  (មិនទាន់ទូទាត់ប្រាក់ • សម្រាប់ភ្ញៀវផ្ទៀងផ្ទាត់)
+                </p>
+              </div>
+
+              <div
+                v-else
+                class="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-0.5"
+              >
+                <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
+                  <UIcon name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>វិក្កយបត្រផ្លូវការ / OFFICIAL RECEIPT</span>
+                </div>
+                <p class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">
+                  (បានទូទាត់ប្រាក់រួចរាល់ • PAID)
+                </p>
+              </div>
+            </div>
+
+            <p class="text-[11px] text-gray-400 font-mono mt-2">
               Order #{{ lastSavedOrder.orderNumber }} • {{ lastSavedOrder.tableNumber }}
             </p>
             <p class="text-[10px] text-gray-400 font-mono">
@@ -987,9 +1320,17 @@ function handlePrint() {
             </div>
           </div>
 
-          <div class="pt-2 text-center text-[11px] text-gray-400">
+          <!-- Footer Notice for Pre-bill vs Official -->
+          <div v-if="receiptMode === 'pre_bill'" class="pt-2 text-center text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+            <p class="font-bold text-purple-700 dark:text-purple-400">
+              * សូមពិនិត្យមើលមុខម្ហូប និងចំនួនទឹកប្រាក់
+            </p>
+            <p>វិក្កយបត្រនេះមិនទាន់ជាបង្កាន់ដៃទទួលប្រាក់ឡើយ</p>
+          </div>
+
+          <div v-else class="pt-2 text-center text-[11px] text-gray-400">
             <p>Payment: {{ lastSavedOrder.paymentMethod.toUpperCase() }}</p>
-            <p class="mt-1 font-bold">សូមអរគុណ! Thank You!</p>
+            <p class="mt-1 font-bold text-emerald-600 dark:text-emerald-400">សូមអរគុណ! Thank You!</p>
           </div>
         </div>
 
@@ -1007,11 +1348,12 @@ function handlePrint() {
           </button>
           <button
             type="button"
-            class="flex-1 py-2 rounded-xl text-xs font-semibold bg-primary-600 hover:bg-primary-500 text-white flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+            class="flex-1 py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+            :class="receiptMode === 'pre_bill' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-primary-600 hover:bg-primary-500'"
             @click="handlePrint"
           >
             <UIcon name="i-heroicons-printer" class="w-4 h-4" />
-            <span>Print Slip (ព្រីន)</span>
+            <span>{{ receiptMode === 'pre_bill' ? 'ព្រីនបុងមើល' : 'Print Slip' }}</span>
           </button>
         </div>
       </div>
@@ -1157,6 +1499,67 @@ function handlePrint() {
             <UIcon v-if="isSubmittingSplit" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
             <span>គិតលុយមុខម្ហូបទាំងនេះ (${{ splitTotalUSD.toFixed(2) }}) & ចេញវិក្កយបត្រ</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 4: CONFIRMATION POPUP (សម្រាប់បញ្ជាក់ការដក ឬបន្ថែម ជៀសវាងការច្រលំដៃ) -->
+    <div
+      v-if="confirmDialog.isOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      @click.self="handleConfirmDialogAction(false)"
+    >
+      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+        <div class="flex items-start gap-3">
+          <div
+            class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5"
+            :class="confirmDialog.type === 'remove' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'"
+          >
+            <UIcon
+              :name="confirmDialog.type === 'remove' ? 'i-heroicons-trash' : (confirmDialog.type === 'add' ? 'i-heroicons-plus-circle' : 'i-heroicons-arrow-down-on-square')"
+              class="w-6 h-6"
+            />
+          </div>
+          <div class="flex-1 min-w-0">
+            <h3 class="font-extrabold text-base text-gray-900 dark:text-white leading-snug">
+              {{ confirmDialog.title }}
+            </h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+              {{ confirmDialog.message }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Details Box -->
+        <div
+          v-if="confirmDialog.details"
+          class="p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 text-xs space-y-1"
+        >
+          <p class="font-bold text-gray-900 dark:text-white truncate">
+            {{ confirmDialog.details.name }}
+          </p>
+          <p v-if="confirmDialog.details.subtext" class="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+            {{ confirmDialog.details.subtext }}
+          </p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            @click="handleConfirmDialogAction(false)"
+          >
+            បោះបង់ (Cancel)
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-xl text-xs font-black text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+            :class="confirmDialog.type === 'remove' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-amber-500 hover:bg-amber-600'"
+            @click="handleConfirmDialogAction(true)"
+          >
+            <span>{{ confirmDialog.confirmText || 'យល់ព្រម' }}</span>
           </button>
         </div>
       </div>

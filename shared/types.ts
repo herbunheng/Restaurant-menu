@@ -378,7 +378,7 @@ export const OrderSchema = z.object({
   discount: z.number().default(0),
   totalAmount: z.number(),
   paymentMethod: z.enum(['cash', 'khqr', 'card']).default('cash'),
-  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).default('paid'),
+  paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).default('paid'),
   cashierName: z.string().optional().default('Cashier'),
   note: z.string().nullable().optional(),
   createdAt: z.union([z.date(), z.string()]).nullable().optional(),
@@ -392,7 +392,7 @@ export const CreateOrderInputSchema = z.object({
   items: z.array(OrderItemSchema).min(1, 'Order must contain at least one item'),
   discount: z.coerce.number().min(0).optional().default(0),
   paymentMethod: z.enum(['cash', 'khqr', 'card']).optional().default('cash'),
-  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).optional().default('paid'),
+  paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional().default('paid'),
   cashierName: z.string().optional().default('Cashier'),
   note: z.string().optional().default(''),
 });
@@ -404,7 +404,7 @@ export const UpdateOrderInputSchema = z.object({
   items: z.array(OrderItemSchema).optional(),
   discount: z.coerce.number().min(0).optional(),
   paymentMethod: z.enum(['cash', 'khqr', 'card']).optional(),
-  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).optional(),
+  paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional(),
   cashierName: z.string().optional(),
   note: z.string().optional(),
 });

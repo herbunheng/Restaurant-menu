@@ -10,7 +10,7 @@ import {
   type DailyReport,
   type TopSellingItem,
 } from '@restaurant-menu/shared';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, or } from 'drizzle-orm';
 import { getDb } from '../db';
 import { orders } from '../db/schema/orders';
 import type { AppEnv } from '../types';
@@ -205,7 +205,7 @@ export async function createOrderController(c: Context<AppEnv>) {
 
 export async function getActiveOrdersController(c: Context<AppEnv>) {
   if (!c.env?.DB) {
-    const active = mockOrders.filter((o) => o.paymentStatus === 'pending');
+    const active = mockOrders.filter((o) => o.paymentStatus === 'pending' || o.paymentStatus === 'billed');
     return c.json(createSuccessResponse(active), 200);
   }
 
@@ -214,7 +214,7 @@ export async function getActiveOrdersController(c: Context<AppEnv>) {
     const rows = await db
       .select()
       .from(orders)
-      .where(eq(orders.paymentStatus, 'pending'))
+      .where(or(eq(orders.paymentStatus, 'pending'), eq(orders.paymentStatus, 'billed')))
       .orderBy(desc(orders.createdAt))
       .all();
     return c.json(createSuccessResponse(rows as Order[]), 200);
@@ -522,7 +522,7 @@ export async function getDailyReportController(c: Context<AppEnv>) {
   const itemMap = new Map<string, TopSellingItem>();
 
   for (const ord of allOrders) {
-    if (ord.paymentStatus !== 'cancelled') {
+    if (ord.paymentStatus === 'paid') {
       const amt = Number(ord.totalAmount) || 0;
       totalRevenueUSD += amt;
 

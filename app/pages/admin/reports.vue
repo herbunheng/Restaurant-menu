@@ -300,6 +300,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
                   <th class="py-2 px-3">តុ (Table)</th>
                   <th class="py-2 px-3">មុខម្ហូប (Items)</th>
                   <th class="py-2 px-3">ទូទាត់ (Method)</th>
+                  <th class="py-2 px-3">ស្ថានភាព (Status)</th>
                   <th class="py-2 px-3 text-right">សរុប (Total)</th>
                 </tr>
               </thead>
@@ -330,6 +331,30 @@ function setDatePreset(type: 'today' | 'yesterday') {
                       ]"
                     >
                       {{ ord.paymentMethod }}
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <span
+                      class="px-2 py-0.5 rounded text-[10px] font-bold font-mono inline-flex items-center gap-1"
+                      :class="[
+                        ord.paymentStatus === 'paid'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50'
+                          : ord.paymentStatus === 'billed'
+                          ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200/50'
+                          : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/50',
+                      ]"
+                    >
+                      <span
+                        class="w-1.5 h-1.5 rounded-full"
+                        :class="[
+                          ord.paymentStatus === 'paid'
+                            ? 'bg-emerald-500'
+                            : ord.paymentStatus === 'billed'
+                            ? 'bg-purple-500'
+                            : 'bg-amber-500',
+                        ]"
+                      ></span>
+                      {{ ord.paymentStatus === 'paid' ? 'PAID' : ord.paymentStatus === 'billed' ? 'BILLED' : 'PENDING' }}
                     </span>
                   </td>
                   <td class="py-2.5 px-3 text-right">

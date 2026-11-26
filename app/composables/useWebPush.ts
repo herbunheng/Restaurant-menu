@@ -14,9 +14,6 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return outputArray;
 }
 
-let lastSeenBroadcastId: string | null = null;
-let broadcastListenerTimer: NodeJS.Timeout | null = null;
-
 export function useWebPush() {
   const { $api } = useApi();
   const config = useRuntimeConfig();
@@ -112,51 +109,8 @@ export function useWebPush() {
     }
   }
 
-  /**
-   * Starts listening for live broadcast notifications from backend API
-   */
-  function startBroadcastListener() {
-    if (!import.meta.client) return;
-    if (broadcastListenerTimer) return;
-
-    broadcastListenerTimer = setInterval(async () => {
-      if (Notification.permission !== 'granted') return;
-
-      try {
-        const res = await $api<{ latestBroadcast?: { id: string; title: string; message: string; url: string } | null }>(
-          '/api/push/latest',
-          { method: 'GET' }
-        );
-
-        const b = res?.latestBroadcast;
-        if (b && b.id && b.id !== lastSeenBroadcastId) {
-          lastSeenBroadcastId = b.id;
-
-          const registration = await navigator.serviceWorker.ready.catch(() => null);
-          if (registration) {
-            registration.showNotification(b.title || '📢 System Broadcast', {
-              body: b.message,
-              icon: '/favicon.ico',
-              badge: '/favicon.ico',
-              data: { url: b.url || '/' },
-            });
-          } else {
-            new Notification(b.title || '📢 System Broadcast', {
-              body: b.message,
-              icon: '/favicon.ico',
-              data: { url: b.url || '/' },
-            });
-          }
-        }
-      } catch {
-        // Silently skip on network error
-      }
-    }, 4000);
-  }
-
   return {
     enablePushNotifications,
     autoInitPushNotifications,
-    startBroadcastListener,
   };
 }
