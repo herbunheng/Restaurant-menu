@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789712321628,
+      "tag": "0000_huge_ben_urich",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789712713056,
+      "tag": "0001_remarkable_purifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789713196334,
+      "tag": "0002_greedy_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789713703173,
+      "tag": "0003_elite_next_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790517006179,
+      "tag": "0004_chemical_titania",
+      "breakpoints": true
+    }
+  ]
+}

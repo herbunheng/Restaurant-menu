@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "restaurant-menu",
+  "pages_build_output_dir": ".output/public",
+  "compatibility_date": "2026-07-20",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  // --- CLOUDFLARE D1 DATABASE BINDING ---
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "restaurant-menu-db",
+      "database_id": "local-db-id",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  // --- CLOUDFLARE KV NAMESPACE FOR DISTRIBUTED RATE LIMITING (SECURITY) ---
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "rate_limit_kv_id"
+    }
+  ]
+}
