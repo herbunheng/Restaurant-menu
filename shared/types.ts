@@ -141,6 +141,7 @@ export const SiteSettingsSchema = z.object({
   siteLogoUrl: z.string().nullable().optional(),
   siteFaviconUrl: z.string().nullable().optional(),
   supportEmail: z.string().nullable().optional(),
+  exchangeRate: z.coerce.number().int().min(1).default(4000), // អត្រាប្តូរប្រាក់ $1 = ... ៛
   
   // Telegram Integration Config
   telegramToken: z.string().nullable().optional(),
@@ -187,6 +188,7 @@ export const UpdateSiteSettingsSchema = z.object({
   siteLogoUrl: z.string().nullable().optional(),
   siteFaviconUrl: z.string().nullable().optional(),
   supportEmail: z.string().nullable().optional(),
+  exchangeRate: z.coerce.number().int().min(1).optional(),
   
   // Telegram Integration Config
   telegramToken: z.string().nullable().optional(),

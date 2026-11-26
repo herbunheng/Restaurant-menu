@@ -13,6 +13,7 @@ import {
 import { desc, eq, or } from 'drizzle-orm';
 import { getDb } from '../db';
 import { orders } from '../db/schema/orders';
+import { siteSettings } from '../db/schema/site_settings';
 import type { AppEnv } from '../types';
 
 // Mock storage for local development fallback
@@ -588,7 +589,11 @@ export async function getDailyReportController(c: Context<AppEnv>) {
   cashUSD = Number(cashUSD.toFixed(2));
   khqrUSD = Number(khqrUSD.toFixed(2));
   cardUSD = Number(cardUSD.toFixed(2));
-  const totalRevenueKHR = Math.round(totalRevenueUSD * 4000);
+
+  // Get dynamic exchange rate from site_settings (default 4000)
+  const currentSetting = await db.select({ exchangeRate: siteSettings.exchangeRate }).from(siteSettings).where(eq(siteSettings.id, 'default')).get();
+  const activeRate = currentSetting?.exchangeRate || 4000;
+  const totalRevenueKHR = Math.round(totalRevenueUSD * activeRate);
 
   const topSellingItems = Array.from(itemMap.values())
     .sort((a, b) => b.totalQuantity - a.totalQuantity)

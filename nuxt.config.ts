@@ -70,6 +70,10 @@ export default defineNuxtConfig({
     enabled: true,
   },
 
+  devServer: {
+    port: 3001,
+  },
+
   css: ["~/assets/css/main.css"],
 
   nitro: {

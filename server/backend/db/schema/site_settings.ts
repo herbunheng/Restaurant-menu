@@ -10,6 +10,7 @@ export const siteSettings = sqliteTable('site_settings', {
   siteLogoUrl: text('site_logo_url'),
   siteFaviconUrl: text('site_favicon_url'),
   supportEmail: text('support_email'),
+  exchangeRate: integer('exchange_rate').notNull().default(4000), // អត្រាប្តូរប្រាក់ $1 = ... ៛ (Default 4000)
 
   // 2. Telegram Integration Config
   telegramToken: text('telegram_token'),

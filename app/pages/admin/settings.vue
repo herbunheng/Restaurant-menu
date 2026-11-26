@@ -13,6 +13,7 @@ interface SiteSettingsForm {
   siteLogoUrl: string;
   siteFaviconUrl: string;
   supportEmail: string;
+  exchangeRate: number;
   telegramToken: string;
   telegramGroupId: string;
   telegramEnabled: boolean;
@@ -45,6 +46,7 @@ const settings = ref<SiteSettingsForm>({
   siteLogoUrl: '',
   siteFaviconUrl: '',
   supportEmail: '',
+  exchangeRate: 4000,
   telegramToken: '',
   telegramGroupId: '',
   telegramEnabled: false,
@@ -77,6 +79,7 @@ function mapToSettingsForm(data?: Partial<SiteSettings> | null): SiteSettingsFor
     siteLogoUrl: data.siteLogoUrl || '',
     siteFaviconUrl: data.siteFaviconUrl || '',
     supportEmail: data.supportEmail || '',
+    exchangeRate: Number(data.exchangeRate) || 4000,
     telegramToken: data.telegramToken || '',
     telegramGroupId: data.telegramGroupId || '',
     telegramEnabled: Boolean(data.telegramEnabled),
@@ -369,6 +372,14 @@ async function handleTestEmail() {
           <UFormField label="Support Email" size="sm">
             <UInput v-model="settings.supportEmail" type="email" placeholder="support@example.com"
               icon="i-heroicons-envelope" class="w-full" />
+          </UFormField>
+
+          <UFormField label="អត្រាប្តូរប្រាក់ ($1 USD = ... ៛ KHR)" size="sm">
+            <UInput v-model.number="settings.exchangeRate" type="number" step="10" placeholder="4000"
+              icon="i-heroicons-arrows-right-left" class="w-full" />
+            <template #help>
+              <span class="text-xs text-gray-500">កំណត់តម្លៃ ១ ដុល្លារស្មើនឹងរៀលសម្រាប់ទូទាំងប្រព័ន្ធ (POS, វិក្កយបត្រ, របាយការណ៍)</span>
+            </template>
           </UFormField>
         </div>
       </div>

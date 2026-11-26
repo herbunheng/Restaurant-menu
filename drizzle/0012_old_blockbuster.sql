@@ -1,0 +1,1 @@
+ALTER TABLE `site_settings` ADD `exchange_rate` integer DEFAULT 4000 NOT NULL;

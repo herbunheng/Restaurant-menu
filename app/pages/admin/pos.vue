@@ -45,6 +45,16 @@ const { data: dbPaymentMethodsData } = await useApiData<PaymentMethodConfig[]>(
   '/api/payment-methods/active'
 );
 
+// 5. Fetch Site Settings for Live Exchange Rate ($1 = ... ៛)
+const { data: siteSettingsData, refresh: refreshSettings } = await useApiData<{ exchangeRate?: number }>(
+  'pos-site-settings',
+  '/api/settings'
+);
+
+const currentExchangeRate = computed(() => {
+  return Number(siteSettingsData.value?.exchangeRate) || DEFAULT_EXCHANGE_RATE;
+});
+
 const activePaymentMethods = computed(() => {
   const methods = dbPaymentMethodsData.value || [];
   if (methods.length > 0) return methods;
@@ -234,7 +244,7 @@ const quickCashUSDBanknotes = [5, 10, 20, 50, 100];
 
 const totalCashReceivedInKHR = computed(() => {
   const khr = Number(checkoutReceivedCashKHR.value) || 0;
-  const usdInKhr = Math.round((Number(checkoutReceivedCashUSD.value) || 0) * EXCHANGE_RATE);
+  const usdInKhr = Math.round((Number(checkoutReceivedCashUSD.value) || 0) * currentExchangeRate.value);
   return khr + usdInKhr;
 });
 
@@ -246,7 +256,7 @@ const checkoutChangeKHR = computed(() => {
 
 const checkoutChangeUSD = computed(() => {
   if (checkoutPaymentMethod.value !== 'cash') return 0;
-  return Number((checkoutChangeKHR.value / EXCHANGE_RATE).toFixed(2));
+  return Number((checkoutChangeKHR.value / currentExchangeRate.value).toFixed(2));
 });
 
 function setQuickCashKHR(amount: number) {
@@ -257,6 +267,59 @@ function setQuickCashKHR(amount: number) {
 function setQuickCashUSD(amount: number) {
   checkoutReceivedCashUSD.value = amount;
   checkoutReceivedCashKHR.value = '';
+}
+
+// Exchange Rate Modal State ($1 = ... ៛)
+const isExchangeRateModalOpen = ref(false);
+const tempExchangeRateInput = ref<number>(4000);
+const isUpdatingRate = ref(false);
+
+function openExchangeRateModal() {
+  tempExchangeRateInput.value = currentExchangeRate.value;
+  isExchangeRateModalOpen.value = true;
+}
+
+async function saveExchangeRate() {
+  const rate = Math.round(Number(tempExchangeRateInput.value));
+  if (!rate || rate <= 0) {
+    toast.add({
+      title: 'អត្រាប្តូរប្រាក់មិនត្រឹមត្រូវ',
+      description: 'សូមបញ្ចូលលេខអត្រាប្តូរប្រាក់វិជ្ជមាន (ឧទាហរណ៍៖ 4000 ឬ 4100)',
+      color: 'warning',
+    });
+    return;
+  }
+
+  isUpdatingRate.value = true;
+  try {
+    await $api('/api/settings', {
+      method: 'PUT',
+      body: {
+        exchangeRate: rate,
+      },
+    });
+
+    await refreshSettings();
+    isExchangeRateModalOpen.value = false;
+
+    if (isPaymentModalOpen.value && checkoutPaymentMethod.value === 'cash') {
+      checkoutReceivedCashKHR.value = totalAmountKHR.value;
+    }
+
+    toast.add({
+      title: 'បានផ្លាស់ប្តូរអត្រាប្តូរប្រាក់!',
+      description: `អត្រាប្តូរប្រាក់ថ្មីគឺ $1 = ${rate.toLocaleString()} ៛`,
+      color: 'success',
+    });
+  } catch (err: any) {
+    toast.add({
+      title: 'បរាជ័យក្នុងការកែប្រែអត្រា',
+      description: err.message || 'Failed to update exchange rate',
+      color: 'error',
+    });
+  } finally {
+    isUpdatingRate.value = false;
+  }
 }
 
 // Mixed Payment State (បង់ចម្រុះ៖ សាច់ប្រាក់ + Pay Online)
@@ -527,8 +590,6 @@ async function handleConfirmSplitPay() {
 }
 
 // Calculations
-const EXCHANGE_RATE = DEFAULT_EXCHANGE_RATE;
-
 const subtotal = computed(() => {
   return Number(cart.value.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
 });
@@ -538,8 +599,12 @@ const totalAmount = computed(() => {
 });
 
 const totalAmountKHR = computed(() => {
-  return convertUsdToKhr(totalAmount.value, EXCHANGE_RATE);
+  return convertUsdToKhr(totalAmount.value, currentExchangeRate.value);
 });
+
+function formatRielPrice(usd: number): string {
+  return formatRiel(usd, currentExchangeRate.value);
+}
 
 // Add Item Handlers
 function handleClickDish(item: MenuItem) {
@@ -902,7 +967,7 @@ async function executeCheckout() {
     const missing = totalAmountKHR.value - totalCashReceivedInKHR.value;
     toast.add({
       title: 'ទឹកប្រាក់ទទួលមិនទាន់គ្រប់ចំនួន',
-      description: `នៅខ្វះ ${missing.toLocaleString()} ៛ (≈ $${(missing / EXCHANGE_RATE).toFixed(2)}) ដើម្បីគ្រប់ចំនួន`,
+      description: `នៅខ្វះ ${missing.toLocaleString()} ៛ (≈ $${(missing / currentExchangeRate.value).toFixed(2)}) ដើម្បីគ្រប់ចំនួន`,
       color: 'warning',
     });
     return;
@@ -1028,6 +1093,18 @@ function handlePrint() {
             </h1>
 
             <div class="flex items-center gap-2 text-xs">
+              <!-- Live Exchange Rate Switcher Button -->
+              <button
+                type="button"
+                class="py-1 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 shadow-2xs group"
+                title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់ $1 = ... ៛"
+                @click="openExchangeRateModal"
+              >
+                <UIcon name="i-heroicons-arrows-right-left" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:rotate-180 transition-transform duration-300" />
+                <span class="font-mono text-emerald-700 dark:text-emerald-300">$1 = {{ currentExchangeRate.toLocaleString() }} ៛</span>
+                <span class="text-[10px] text-gray-400 font-normal group-hover:text-emerald-600 underline">កែប្រែ</span>
+              </button>
+
               <span class="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
                 <span class="w-2 h-2 rounded-full bg-emerald-500"></span> តុទំនេរ
               </span>
@@ -1905,9 +1982,19 @@ function handlePrint() {
               {{ formatRiel(totalAmount) }} ៛
             </span>
           </div>
-          <span class="block text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">
-            ≈ ${{ totalAmount.toFixed(2) }} (អត្រាប្តូរប្រាក់ $1 = 4,000 ៛)
-          </span>
+          <div class="flex items-center justify-center gap-1.5">
+            <span class="text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">
+              ≈ ${{ totalAmount.toFixed(2) }} (អត្រាប្តូរប្រាក់ $1 = {{ currentExchangeRate.toLocaleString() }} ៛)
+            </span>
+            <button
+              type="button"
+              class="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
+              title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់"
+              @click="openExchangeRateModal"
+            >
+              [កែប្រែ]
+            </button>
+          </div>
           <p v-if="discount > 0" class="text-[11px] text-amber-600 font-semibold pt-1">
             (បានចុះថ្លៃបញ្ចុះតម្លៃ -${{ discount.toFixed(2) }} រួចរាល់)
           </p>
@@ -2032,7 +2119,7 @@ function handlePrint() {
           <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 space-y-2">
             <div class="flex items-center justify-between text-xs font-mono">
               <span class="text-gray-500">សរុបប្រាក់ទទួល (គិតជារៀល)៖</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛ (≈ ${{ (totalCashReceivedInKHR / EXCHANGE_RATE).toFixed(2) }})</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛ (≈ ${{ (totalCashReceivedInKHR / currentExchangeRate).toFixed(2) }})</span>
             </div>
 
             <!-- Missing Alert -->
@@ -2306,6 +2393,90 @@ function handlePrint() {
             <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-printer" class="w-4 h-4" />
             <span>បញ្ជាក់ចេញបុង ({{ activeBilledByName || 'ជ្រើសរើស' }})</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 7: EXCHANGE RATE SWITCHER MODAL (ផ្ទាំងកែប្រែអត្រាប្តូរប្រាក់ $ ➔ ៛) -->
+    <div v-if="isExchangeRateModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+      @click.self="isExchangeRateModalOpen = false">
+      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+        <!-- Header -->
+        <div class="flex items-start justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+          <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <UIcon name="i-heroicons-arrows-right-left" class="w-5 h-5 text-emerald-600" />
+              <span>កែប្រែអត្រាប្តូរប្រាក់ ($ ➔ ៛)</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              កំណត់តម្លៃ ១ ដុល្លារ ($) ស្មើនឹងប៉ុន្មានរៀល (៛) សម្រាប់ហាង
+            </p>
+          </div>
+          <button type="button" class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="isExchangeRateModalOpen = false">
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Input -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-gray-700 dark:text-gray-300">
+            តម្លៃ ១ ដុល្លារ ($1.00) =
+          </label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-emerald-600">៛</span>
+            <input
+              v-model.number="tempExchangeRateInput"
+              type="number"
+              step="10"
+              min="1000"
+              placeholder="4000"
+              class="w-full pl-8 pr-12 py-2.5 text-lg font-black font-mono rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+              @keydown.enter="saveExchangeRate"
+            />
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">រៀល</span>
+          </div>
+
+          <!-- Quick Presets -->
+          <div class="space-y-1 pt-1">
+            <span class="text-[11px] font-medium text-gray-400">អត្រាទូទៅពេញនិយម៖</span>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button
+                v-for="r in [4000, 4050, 4100, 4150]"
+                :key="r"
+                type="button"
+                class="py-1 px-2 rounded-lg text-xs font-bold font-mono transition-all border cursor-pointer text-center"
+                :class="tempExchangeRateInput === r
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400'"
+                @click="tempExchangeRateInput = r"
+              >
+                {{ r.toLocaleString() }} ៛
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <button
+            type="button"
+            class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            @click="isExchangeRateModalOpen = false"
+          >
+            បោះបង់
+          </button>
+          <button
+            type="button"
+            :disabled="isUpdatingRate || !tempExchangeRateInput || tempExchangeRateInput <= 0"
+            class="flex-2 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+            @click="saveExchangeRate"
+          >
+            <UIcon v-if="isUpdatingRate" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
+            <span>រក្សាទុកអត្រាថ្មី ({{ tempExchangeRateInput?.toLocaleString() || 4000 }} ៛)</span>
           </button>
         </div>
       </div>
