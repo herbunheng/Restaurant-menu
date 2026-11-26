@@ -218,6 +218,47 @@ watch([currentSelectedTableName, activeOrders], () => {
   syncTableOrder();
 }, { immediate: true });
 
+// ពិនិត្យមើលថាតើមានការកែប្រែ (Order Modified/Dirty) លើតុដែលកំពុងញ៉ាំដែរឬទេ
+const hasOrderChanges = computed(() => {
+  if (!isCurrentTableOccupied.value || !currentActiveOrder.value) {
+    // សម្រាប់តុទំនេរ (Available Table): បើមានមុខម្ហូបក្នុងកន្ត្រក គឺមានការកែប្រែ
+    return cart.value.length > 0;
+  }
+
+  const orig = currentActiveOrder.value;
+  const originalItems = orig.items || [];
+
+  // 1. ពិនិត្យចំនួនមុខម្ហូប (Item Count)
+  if (cart.value.length !== originalItems.length) return true;
+
+  // 2. ពិនិត្យមុខម្ហូបនីមួយៗ (Quantity, Variant, Note)
+  for (const item of cart.value) {
+    const matched = originalItems.find(
+      (o) => o.menuItemId === item.menuItemId && (o.variantLabel || '') === (item.variantLabel || '')
+    );
+    if (!matched) return true;
+    if (matched.quantity !== item.quantity) return true;
+    if ((matched.note || '') !== (item.note || '')) return true;
+  }
+
+  // 3. ពិនិត្យការបញ្ចុះតម្លៃ (Discount)
+  const currentDiscount = Number(discount.value) || 0;
+  const origDiscount = Number(orig.discount) || 0;
+  if (currentDiscount !== origDiscount) return true;
+
+  // 4. ពិនិត្យចំណាំរួមរបស់ Order (Order Note)
+  const currentNote = orderNote.value.trim();
+  const origNote = (orig.note || '').trim();
+  if (currentNote !== origNote) return true;
+
+  // 5. ពិនិត្យអ្នកកត់ Order (Waiter Name)
+  const currentWaiter = activeWaiterName.value.trim();
+  const origWaiter = (orig.waiterName || '').trim();
+  if (currentWaiter && currentWaiter !== origWaiter) return true;
+
+  return false;
+});
+
 function handleSelectTable(t: string) {
   selectedTable.value = t;
   customTableInput.value = '';
@@ -626,13 +667,22 @@ function clearCart() {
   orderNote.value = '';
 }
 
-// 1. ACTION: HOLD / APPEND ORDER (ទុកតុ / Order បន្ថែម - រក្សាទុកភ្លាមៗដោយគ្មានផ្ទាំងរំខាន)
+// 1. ACTION: HOLD / APPEND ORDER (ទុកតុ / កែប្រែ Order - រក្សាទុកភ្លាមៗដោយគ្មានផ្ទាំងរំខាន)
 async function handleSavePendingOrder() {
   if (cart.value.length === 0) {
     toast.add({
       title: 'មិនទាន់មានមុខម្ហូប',
       description: 'សូមជ្រើសរើសមុខម្ហូបយ៉ាងហោចណាស់មួយ',
       color: 'warning',
+    });
+    return;
+  }
+
+  if (isCurrentTableOccupied.value && !hasOrderChanges.value) {
+    toast.add({
+      title: 'មិនមានការកែប្រែ',
+      description: 'មិនទាន់មានការផ្លាស់ប្តូរ ឬថែមមុខម្ហូបណាមួយនៅឡើយទេ',
+      color: 'neutral',
     });
     return;
   }
@@ -658,8 +708,8 @@ async function executeSavePendingOrder() {
       });
 
       toast.add({
-        title: 'បានបន្ថែមមុខម្ហូបជោគជ័យ!',
-        description: `បានបន្ថែមមុខម្ហូបចូល ${table} រួចរាល់`,
+        title: 'បានកែប្រែ Order ជោគជ័យ!',
+        description: `បានរក្សាទុកការកែប្រែសម្រាប់ ${table} រួចរាល់`,
         color: 'success',
       });
     } else {
@@ -1360,13 +1410,16 @@ function handlePrint() {
 
         <!-- ACTIONS: OCCUPIED (Save / Pre-Bill / Checkout) vs NEW (Hold / Checkout) -->
         <div v-if="isCurrentTableOccupied" class="grid grid-cols-3 gap-1.5 pt-1">
-          <!-- Button 1: Save / Append Items -->
-          <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
-            class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="រក្សាទុកការបន្ថែមមុខម្ហូបទៅផ្ទះបាយ" @click="handleSavePendingOrder">
+          <!-- Button 1: Modify / Update Existing Order (Disabled when no changes) -->
+          <button type="button" :disabled="!hasOrderChanges || cart.length === 0 || isSubmitting || isPrintingPreBill"
+            class="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+            :class="hasOrderChanges
+              ? 'bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-md font-black'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 font-bold'"
+            title="រក្សាទុកការកែប្រែ ឬថែមមុខម្ហូប" @click="handleSavePendingOrder">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
-            <UIcon v-else name="i-heroicons-plus-circle" class="w-4 h-4" />
-            <span>ថែមម្ហូប</span>
+            <UIcon v-else name="i-heroicons-pencil-square" class="w-4 h-4" />
+            <span>កែប្រែ</span>
           </button>
 
           <!-- Button 2: Pre-Bill -->
