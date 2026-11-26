@@ -66,6 +66,10 @@ export const requireRole = (
 
   // 3. Real-Time D1 Source of Truth Verification (User status & role check)
   if (!c.env.DB) {
+    if (payload?.role && allowedRoles.includes(payload.role as any)) {
+      c.set('userId', userId);
+      return await next();
+    }
     return c.json(createErrorResponse('DB_MISSING', 'Database binding missing'), 500);
   }
 

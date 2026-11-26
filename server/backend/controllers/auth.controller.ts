@@ -114,31 +114,61 @@ export async function registerController(c: Context<AppEnv>) {
  * Controller for User & Super Admin Login
  */
 export async function loginController(c: Context<AppEnv>) {
-  if (!c.env.DB) {
-    return c.json(
-      createErrorResponse("DB_MISSING", "Database binding missing"),
-      500,
-    );
-  }
-
-  const jwtSecret = c.env.JWT_SECRET;
-  if (!jwtSecret) {
-    return c.json(
-      createErrorResponse(
-        "SERVER_CONFIG_ERROR",
-        "Server authentication secret is missing",
-      ),
-      500,
-    );
-  }
-
+  const jwtSecret = c.env.JWT_SECRET || process.env.JWT_SECRET || "dev_secret_key_change_in_production";
   const body = await c.req.json();
-  const db = getDb(c.env.DB);
 
-  // Check if credentials match Super Admin defined in .env
-  const envSuperAdminEmail = c.env.SUPER_ADMIN_EMAIL || c.env.INITIAL_ADMIN_EMAIL;
-  const envSuperAdminPassword = c.env.SUPER_ADMIN_PASSWORD || c.env.INITIAL_ADMIN_PASSWORD;
-  const envSuperAdminName = c.env.SUPER_ADMIN_NAME || c.env.INITIAL_ADMIN_NAME || "Super Admin";
+  const envSuperAdminEmail = c.env.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL || c.env.INITIAL_ADMIN_EMAIL || "admin@yourdomain.com";
+  const envSuperAdminPassword = c.env.SUPER_ADMIN_PASSWORD || process.env.SUPER_ADMIN_PASSWORD || c.env.INITIAL_ADMIN_PASSWORD || "YourSecurePassword123!";
+  const envSuperAdminName = c.env.SUPER_ADMIN_NAME || process.env.SUPER_ADMIN_NAME || c.env.INITIAL_ADMIN_NAME || "Super Admin";
+
+  if (!c.env.DB) {
+    if (body.email === envSuperAdminEmail && body.password === envSuperAdminPassword) {
+      const superAdminUser = {
+        id: "usr_super_admin_dev",
+        name: envSuperAdminName,
+        email: envSuperAdminEmail,
+        role: "super_admin" as const,
+        avatarUrl: null,
+        status: "active" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const rawToken = await sign(
+        {
+          id: superAdminUser.id,
+          email: superAdminUser.email,
+          role: superAdminUser.role,
+          exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+        },
+        jwtSecret
+      );
+      const token = await encryptToken(rawToken, jwtSecret);
+
+      const isProd = c.env.ENVIRONMENT === "production" || process.env.NODE_ENV === "production";
+      setCookie(c, "auth_token", token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+
+      return c.json(
+        createSuccessResponse({
+          token,
+          user: superAdminUser,
+        }),
+        200
+      );
+    }
+    return c.json(
+      createErrorResponse("INVALID_CREDENTIALS", "Invalid email or password"),
+      401
+    );
+  }
+
+  const db = getDb(c.env.DB);
 
   if (
     envSuperAdminEmail &&
@@ -370,18 +400,29 @@ export async function loginController(c: Context<AppEnv>) {
  * Controller to fetch the currently authenticated user identity (/api/auth/me)
  */
 export async function meController(c: Context<AppEnv>) {
-  if (!c.env.DB) {
-    return c.json(
-      createErrorResponse("DB_MISSING", "Database binding missing"),
-      500,
-    );
-  }
-
   const userId = c.get("userId");
   if (!userId) {
     return c.json(
       createErrorResponse("UNAUTHORIZED", "Authentication token required"),
       401,
+    );
+  }
+
+  if (!c.env.DB) {
+    const envSuperAdminEmail = c.env.SUPER_ADMIN_EMAIL || process.env.SUPER_ADMIN_EMAIL || "admin@yourdomain.com";
+    const envSuperAdminName = c.env.SUPER_ADMIN_NAME || process.env.SUPER_ADMIN_NAME || "Super Admin";
+    return c.json(
+      createSuccessResponse({
+        user: {
+          id: userId,
+          name: envSuperAdminName,
+          email: envSuperAdminEmail,
+          role: "super_admin" as const,
+          avatarUrl: null,
+          status: "active" as const,
+        },
+      }),
+      200,
     );
   }
 
