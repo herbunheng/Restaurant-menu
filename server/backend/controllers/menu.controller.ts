@@ -75,6 +75,25 @@ const mockMenuItems: MenuItem[] = [
     createdAt: new Date(),
     updatedAt: new Date(),
   },
+  {
+    id: 'item_05',
+    name: 'Angkor Beer / Cambodia Beer (ស្រាបៀរ)',
+    categoryId: 'cat_drinks',
+    categoryName: 'Beverages (ភេសជ្ជៈ)',
+    price: 0.75,
+    currency: 'USD',
+    imageUrl: 'https://images.unsplash.com/photo-1608270119859-58b73f911ec5?auto=format&fit=crop&w=600&q=80',
+    description: 'ត្រជាក់ស្រួល មានលក់ជាកំប៉ុង ដបធំ ឬជាកេស។',
+    isAvailable: true,
+    hasVariants: true,
+    variants: [
+      { label: '1 កំប៉ុង (Can)', price: 0.75 },
+      { label: '1 ដបធំ (Bottle)', price: 2.5 },
+      { label: '1 កេស (Case 24 Cans)', price: 16.0 },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
 ];
 
 export async function listMenuItemsController(c: Context<AppEnv>) {

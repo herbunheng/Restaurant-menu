@@ -135,9 +135,9 @@ function removeVariantOption(index: number) {
   itemForm.value.variants.splice(index, 1);
 }
 
-function applyPreset(presetType: 'sizes' | 'drinks') {
+function applyPreset(presetType: 'sizes' | 'drinks' | 'beer_units' | 'beer_draught') {
   itemForm.value.hasVariants = true;
-  const base = itemForm.value.price || (presetType === 'sizes' ? 3.5 : 1.5);
+  const base = itemForm.value.price || (presetType === 'sizes' ? 3.5 : presetType === 'beer_units' ? 0.75 : 1.5);
 
   if (presetType === 'sizes') {
     itemForm.value.variants = [
@@ -150,6 +150,18 @@ function applyPreset(presetType: 'sizes' | 'drinks') {
       { label: 'Hot (ក្តៅ)', price: Number(base.toFixed(2)) },
       { label: 'Iced (ត្រជាក់)', price: Number((base + 0.5).toFixed(2)) },
       { label: 'Frappe (ក្រឡុក)', price: Number((base + 1.25).toFixed(2)) },
+    ];
+  } else if (presetType === 'beer_units') {
+    itemForm.value.variants = [
+      { label: '1 កំប៉ុង (1 Can)', price: 0.75 }, // ~3,000 ៛
+      { label: '1 ដប (1 Bottle)', price: 2.5 },   // ~10,000 ៛
+      { label: '1 កេស (Case 24 Cans)', price: 16.0 }, // ~65,000 ៛
+    ];
+  } else if (presetType === 'beer_draught') {
+    itemForm.value.variants = [
+      { label: '1 កែវ (Glass)', price: 1.0 },     // ~4,100 ៛
+      { label: '1 ថូ (Pitcher)', price: 3.5 },    // ~14,000 ៛
+      { label: '1 ប៉ោត/ធុង (Tower 3L)', price: 10.0 }, // ~41,000 ៛
     ];
   }
 }
@@ -733,23 +745,17 @@ function formatRiel(usd: number): string {
               <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
                 Dish / Item Name (ឈ្មោះមុខម្ហូប) *
               </label>
-              <input
-                v-model="itemForm.name"
-                type="text"
-                placeholder="e.g. ឡុកឡាក់សាច់គោ (Beef Lok Lak)"
+              <input v-model="itemForm.name" type="text" placeholder="e.g. ឡុកឡាក់សាច់គោ (Beef Lok Lak)"
                 class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-medium"
-                required
-              />
+                required />
             </div>
 
             <div class="sm:w-5/12 space-y-1.5">
               <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
                 Category (ប្រភេទមុខម្ហូប)
               </label>
-              <select
-                v-model="itemForm.categoryId"
-                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
-              >
+              <select v-model="itemForm.categoryId"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer">
                 <option value="">-- No Category --</option>
                 <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
                   {{ cat.name }}
@@ -762,15 +768,10 @@ function formatRiel(usd: number): string {
           <div
             class="p-4 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 space-y-4">
             <div class="flex items-center justify-between">
-              <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-                  <UIcon name="i-heroicons-tag" class="w-4 h-4 text-primary-500" />
-                  <span>ទម្រង់តម្លៃ (Pricing Structure)</span>
-                </p>
-                <p class="text-[11px] text-gray-500">
-                  ជ្រើសរើសថាតើមុខម្ហូបមានតម្លៃទោល ឬមានច្រើនទំហំ/តម្លៃ (Sizes / Options)
-                </p>
-              </div>
+              <p class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                <UIcon name="i-heroicons-tag" class="w-4 h-4 text-primary-500" />
+                <span>ទម្រង់តម្លៃ (Pricing Structure)</span>
+              </p>
 
               <!-- Switch -->
               <label class="relative inline-flex items-center cursor-pointer">
@@ -807,42 +808,83 @@ function formatRiel(usd: number): string {
               <!-- Quick Presets -->
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ (Presets):</span>
-                <button type="button"
+                <button
+                  type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('sizes')">
+                  @click="applyPreset('sizes')"
+                >
                   <UIcon name="i-heroicons-scale" class="w-3.5 h-3.5 text-primary-500" />
                   <span>🍽️ S / M / L (តូច/កណ្តាល/ធំ)</span>
                 </button>
-                <button type="button"
+                <button
+                  type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
-                  @click="applyPreset('drinks')">
+                  @click="applyPreset('drinks')"
+                >
                   <UIcon name="i-heroicons-beaker" class="w-3.5 h-3.5 text-primary-500" />
                   <span>☕ ក្តៅ / ត្រជាក់ / ក្រឡុក</span>
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                  @click="applyPreset('beer_units')"
+                >
+                  <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 text-amber-500" />
+                  <span>🍺 កំប៉ុង / ដប / កេស</span>
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-amber-500 hover:text-amber-600 dark:hover:text-amber-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                  @click="applyPreset('beer_draught')"
+                >
+                  <UIcon name="i-heroicons-trophy" class="w-3.5 h-3.5 text-amber-500" />
+                  <span>🍻 កែវ / ថូ / ធុង Tower</span>
                 </button>
               </div>
 
               <!-- Variant Rows -->
               <div class="space-y-2">
-                <div v-for="(variant, vIdx) in itemForm.variants" :key="vIdx"
-                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs">
+                <div
+                  v-for="(variant, vIdx) in itemForm.variants"
+                  :key="vIdx"
+                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs"
+                >
                   <div class="flex-1">
-                    <input v-model="variant.label" type="text" placeholder="e.g. ចានតូច (Small), ត្រជាក់ (Iced)..."
+                    <input
+                      v-model="variant.label"
+                      type="text"
+                      placeholder="e.g. 1 កំប៉ុង (Can), 1 ដប (Bottle), 1 កេស (Case)..."
                       class="w-full px-3 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-medium"
-                      required />
+                      required
+                    />
                   </div>
 
-                  <div class="w-32 relative">
-                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">$</span>
-                    <input v-model.number="variant.price" type="number" step="0.25" min="0" placeholder="0.00"
-                      class="w-full pl-6 pr-2 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400 font-mono text-right"
-                      required />
+                  <div class="w-36 flex flex-col items-end">
+                    <div class="w-full relative">
+                      <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">$</span>
+                      <input
+                        v-model.number="variant.price"
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        placeholder="0.00"
+                        class="w-full pl-6 pr-2 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400 font-mono text-right"
+                        required
+                      />
+                    </div>
+                    <span class="text-[10px] text-gray-400 font-mono pr-1 mt-0.5">
+                      ≈ {{ formatRiel(variant.price || 0) }} ៛
+                    </span>
                   </div>
 
-                  <button type="button"
+                  <button
+                    type="button"
                     class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                    title="Remove variant" :disabled="itemForm.variants.length <= 1"
+                    title="Remove variant"
+                    :disabled="itemForm.variants.length <= 1"
                     :class="{ 'opacity-30 cursor-not-allowed': itemForm.variants.length <= 1 }"
-                    @click="removeVariantOption(vIdx)">
+                    @click="removeVariantOption(vIdx)"
+                  >
                     <UIcon name="i-heroicons-trash" class="w-4 h-4" />
                   </button>
                 </div>
