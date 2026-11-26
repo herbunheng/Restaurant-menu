@@ -6,7 +6,6 @@ definePageMeta({
 });
 
 const { login, loginWithGoogle, isLoading } = useAuth();
-const { trackEvent } = useAnalytics();
 const toast = useToast();
 const router = useRouter();
 const config = useRuntimeConfig();
@@ -42,12 +41,6 @@ async function handleLogin() {
   toast.clear();
   errorMessage.value = '';
   successMessage.value = '';
-
-  // Track credentials login button click event
-  trackEvent('login_click', {
-    eventCategory: 'auth',
-    eventLabel: 'Credential Login Form Submit',
-  });
 
   if (!email.value || !password.value) {
     errorMessage.value = 'Please enter both your admin email and password.';
@@ -90,12 +83,6 @@ async function handleGoogleLogin() {
   isGoogleLoading.value = true;
   errorMessage.value = '';
   successMessage.value = '';
-
-  // Track google login button click event
-  trackEvent('google_login_click', {
-    eventCategory: 'auth',
-    eventLabel: 'Continue with Google Button',
-  });
 
   // Get Google Client ID dynamically from encrypted backend public API config
   const { fetchPublicConfig } = usePublicConfig();

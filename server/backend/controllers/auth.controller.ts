@@ -679,18 +679,22 @@ export async function googleLoginController(c: Context<AppEnv>) {
  * Controller to fetch public app configuration encrypted via AES-256-GCM
  */
 export async function getPublicConfigController(c: Context<AppEnv>) {
-  if (!c.env.DB) {
-    return c.json(createErrorResponse("DB_MISSING", "Database binding missing"), 500);
-  }
+  let settings: any = null;
 
-  const db = getDb(c.env.DB);
-  let settings = await db.select().from(siteSettings).where(eq(siteSettings.id, "default")).get();
+  if (c.env?.DB) {
+    try {
+      const db = getDb(c.env.DB);
+      settings = await db.select().from(siteSettings).where(eq(siteSettings.id, "default")).get();
+    } catch {
+      settings = null;
+    }
+  }
 
   if (!settings) {
     settings = {
       id: "default",
-      siteName: "My Site",
-      siteDescription: "Production-ready Fullstack Monorepo Application",
+      siteName: "Restaurant Menu",
+      siteDescription: "Modern restaurant menu application",
       siteUrl: null,
       siteLogoUrl: null,
       siteFaviconUrl: null,
@@ -704,7 +708,7 @@ export async function getPublicConfigController(c: Context<AppEnv>) {
       resendEnabled: false,
       notificationToken: null,
       vapidPublicKey: null,
-      googleClientId: null,
+      googleClientId: c.env?.GOOGLE_CLIENT_ID || null,
       googleClientSecret: null,
       googleAuthEnabled: false,
       allowRegistration: true,
@@ -719,7 +723,7 @@ export async function getPublicConfigController(c: Context<AppEnv>) {
   }
 
   const publicConfig = {
-    siteName: settings.siteName || "My Site",
+    siteName: settings.siteName || "Restaurant Menu",
     siteDescription: settings.siteDescription || "",
     siteUrl: settings.siteUrl || "",
     googleClientId: settings.googleClientId || "",
