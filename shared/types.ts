@@ -312,6 +312,13 @@ export const CreateCategoryInputSchema = z.object({
 
 export type CreateCategoryInput = z.infer<typeof CreateCategoryInputSchema>;
 
+export const MenuItemVariantSchema = z.object({
+  label: z.string().min(1, 'Option name is required'),
+  price: z.coerce.number().min(0, 'Price must be positive'),
+});
+
+export type MenuItemVariant = z.infer<typeof MenuItemVariantSchema>;
+
 export const MenuItemSchema = z.object({
   id: z.string(),
   name: z.string().min(1, 'Item name is required'),
@@ -321,6 +328,8 @@ export const MenuItemSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   isAvailable: z.boolean().default(true),
+  hasVariants: z.boolean().default(false),
+  variants: z.array(MenuItemVariantSchema).nullable().optional(),
   createdAt: z.union([z.date(), z.string()]).nullable().optional(),
   updatedAt: z.union([z.date(), z.string()]).nullable().optional(),
   categoryName: z.string().optional(),
@@ -336,6 +345,8 @@ export const CreateMenuItemInputSchema = z.object({
   imageUrl: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   isAvailable: z.boolean().optional().default(true),
+  hasVariants: z.boolean().optional().default(false),
+  variants: z.array(MenuItemVariantSchema).optional().default([]),
 });
 
 export type CreateMenuItemInput = z.infer<typeof CreateMenuItemInputSchema>;

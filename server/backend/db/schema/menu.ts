@@ -17,6 +17,8 @@ export const menuItems = sqliteTable('menu_items', {
   imageUrl: text('image_url'),
   description: text('description'),
   isAvailable: integer('is_available', { mode: 'boolean' }).notNull().default(true),
+  hasVariants: integer('has_variants', { mode: 'boolean' }).notNull().default(false),
+  variants: text('variants', { mode: 'json' }).$type<{ label: string; price: number }[]>(),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });

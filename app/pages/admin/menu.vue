@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { MenuItem, Category } from '@restaurant-menu/shared';
+import type { MenuItem, Category, MenuItemVariant } from '@restaurant-menu/shared';
 
 definePageMeta({
   layout: 'admin',
@@ -47,8 +47,8 @@ const totalItems = computed(() => menuList.value.length);
 const availableItems = computed(() => menuList.value.filter((i) => i.isAvailable).length);
 const totalCategories = computed(() => categoriesList.value.length);
 const avgPrice = computed(() => {
-  if (!menuList.value.length) return 0;
-  const sum = menuList.value.reduce((acc, curr) => acc + (curr.price || 0), 0);
+  if (!menuList.value.length) return '0.00';
+  const sum = menuList.value.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   return (sum / menuList.value.length).toFixed(2);
 });
 
@@ -58,7 +58,17 @@ const isEditing = ref(false);
 const editingItemId = ref<string | null>(null);
 const isSubmitting = ref(false);
 
-const itemForm = ref({
+const itemForm = ref<{
+  name: string;
+  categoryId: string;
+  price: number;
+  currency: string;
+  imageUrl: string;
+  description: string;
+  isAvailable: boolean;
+  hasVariants: boolean;
+  variants: MenuItemVariant[];
+}>({
   name: '',
   categoryId: '',
   price: 0,
@@ -66,6 +76,8 @@ const itemForm = ref({
   imageUrl: '',
   description: '',
   isAvailable: true,
+  hasVariants: false,
+  variants: [],
 });
 
 function openCreateItemModal() {
@@ -73,12 +85,17 @@ function openCreateItemModal() {
   editingItemId.value = null;
   itemForm.value = {
     name: '',
-    categoryId: categoriesList.value[0]?.id || '',
+    categoryId: categoriesList.value[0]?.id ?? '',
     price: 0,
     currency: 'USD',
     imageUrl: '',
     description: '',
     isAvailable: true,
+    hasVariants: false,
+    variants: [
+      { label: 'ចានតូច (Small)', price: 3.5 },
+      { label: 'ចានធំ (Large)', price: 5.0 },
+    ],
   };
   isItemModalOpen.value = true;
 }
@@ -89,13 +106,90 @@ function openEditItemModal(item: MenuItem) {
   itemForm.value = {
     name: item.name,
     categoryId: item.categoryId ?? '',
-    price: item.price,
+    price: Number(item.price) || 0,
     currency: item.currency ?? 'USD',
     imageUrl: item.imageUrl ?? '',
     description: item.description ?? '',
     isAvailable: item.isAvailable ?? true,
+    hasVariants: Boolean(item.hasVariants),
+    variants:
+      item.variants && item.variants.length > 0
+        ? JSON.parse(JSON.stringify(item.variants))
+        : [
+            { label: 'ចានតូច (Small)', price: Number(item.price) || 0 },
+            { label: 'ចានធំ (Large)', price: (Number(item.price) || 0) + 1.5 },
+          ],
   };
   isItemModalOpen.value = true;
+}
+
+function addVariantOption() {
+  const currentLength = itemForm.value.variants.length;
+  itemForm.value.variants.push({
+    label: `ជម្រើស ${currentLength + 1} (Option ${currentLength + 1})`,
+    price: itemForm.value.price || 0,
+  });
+}
+
+function removeVariantOption(index: number) {
+  itemForm.value.variants.splice(index, 1);
+}
+
+function applyPreset(presetType: 'sizes' | 'drinks') {
+  itemForm.value.hasVariants = true;
+  const base = itemForm.value.price || (presetType === 'sizes' ? 3.5 : 1.5);
+
+  if (presetType === 'sizes') {
+    itemForm.value.variants = [
+      { label: 'ចានតូច (Small)', price: Number(base.toFixed(2)) },
+      { label: 'ចានកណ្តាល (Medium)', price: Number((base * 1.35).toFixed(2)) },
+      { label: 'ចានធំ (Large)', price: Number((base * 1.7).toFixed(2)) },
+    ];
+  } else if (presetType === 'drinks') {
+    itemForm.value.variants = [
+      { label: 'Hot (ក្តៅ)', price: Number(base.toFixed(2)) },
+      { label: 'Iced (ត្រជាក់)', price: Number((base + 0.5).toFixed(2)) },
+      { label: 'Frappe (ក្រឡុក)', price: Number((base + 1.25).toFixed(2)) },
+    ];
+  }
+}
+
+function getItemPriceInfo(item: MenuItem) {
+  if (item.hasVariants && item.variants && item.variants.length > 0) {
+    const validPrices = item.variants
+      .map((v) => Number(v.price))
+      .filter((p) => !isNaN(p));
+
+    if (validPrices.length > 0) {
+      const min = Math.min(...validPrices);
+      const max = Math.max(...validPrices);
+      if (min === max) {
+        return {
+          formatted: `$${min.toFixed(2)}`,
+          riel: `~${formatRiel(min)} ៛`,
+          min,
+          max,
+          isRange: false,
+        };
+      }
+      return {
+        formatted: `$${min.toFixed(2)} - $${max.toFixed(2)}`,
+        riel: `~${formatRiel(min)} - ${formatRiel(max)} ៛`,
+        min,
+        max,
+        isRange: true,
+      };
+    }
+  }
+
+  const p = Number(item.price) || 0;
+  return {
+    formatted: `$${p.toFixed(2)}`,
+    riel: `~${formatRiel(p)} ៛`,
+    min: p,
+    max: p,
+    isRange: false,
+  };
 }
 
 async function handleSaveItem() {
@@ -108,21 +202,69 @@ async function handleSaveItem() {
     return;
   }
 
-  if (itemForm.value.price < 0 || isNaN(itemForm.value.price)) {
-    toast.add({
-      title: 'តម្លៃមិនត្រឹមត្រូវ',
-      description: 'Price must be 0 or greater',
-      color: 'warning',
-    });
-    return;
+  if (itemForm.value.hasVariants) {
+    if (!itemForm.value.variants || itemForm.value.variants.length === 0) {
+      toast.add({
+        title: 'សូមបន្ថែមជម្រើសទំហំ/តម្លៃ',
+        description: 'Please add at least one variant option',
+        color: 'warning',
+      });
+      return;
+    }
+
+    const hasEmptyLabel = itemForm.value.variants.some((v) => !v.label.trim());
+    if (hasEmptyLabel) {
+      toast.add({
+        title: 'សូមបញ្ចូលឈ្មោះជម្រើសឱ្យបានពេញលេញ',
+        description: 'All variant options must have a valid label',
+        color: 'warning',
+      });
+      return;
+    }
+
+    const hasInvalidPrice = itemForm.value.variants.some((v) => isNaN(v.price) || v.price < 0);
+    if (hasInvalidPrice) {
+      toast.add({
+        title: 'តម្លៃទំហំមិនត្រឹមត្រូវ',
+        description: 'Variant price must be 0 or greater',
+        color: 'warning',
+      });
+      return;
+    }
+
+    // Set base price to lowest variant price
+    const minPrice = Math.min(...itemForm.value.variants.map((v) => Number(v.price)));
+    itemForm.value.price = minPrice;
+  } else {
+    if (itemForm.value.price < 0 || isNaN(itemForm.value.price)) {
+      toast.add({
+        title: 'តម្លៃមិនត្រឹមត្រូវ',
+        description: 'Price must be 0 or greater',
+        color: 'warning',
+      });
+      return;
+    }
+    itemForm.value.variants = [];
   }
 
   isSubmitting.value = true;
   try {
+    const payload = {
+      name: itemForm.value.name.trim(),
+      categoryId: itemForm.value.categoryId || null,
+      price: Number(itemForm.value.price),
+      currency: itemForm.value.currency || 'USD',
+      imageUrl: itemForm.value.imageUrl || null,
+      description: itemForm.value.description ? itemForm.value.description.trim() : null,
+      isAvailable: Boolean(itemForm.value.isAvailable),
+      hasVariants: Boolean(itemForm.value.hasVariants),
+      variants: itemForm.value.hasVariants ? itemForm.value.variants : [],
+    };
+
     if (isEditing.value && editingItemId.value) {
       await $api(`/api/menu/${editingItemId.value}`, {
         method: 'PUT',
-        body: itemForm.value,
+        body: payload,
       });
       toast.add({
         title: 'បានកែប្រែជោគជ័យ',
@@ -132,7 +274,7 @@ async function handleSaveItem() {
     } else {
       await $api('/api/menu', {
         method: 'POST',
-        body: itemForm.value,
+        body: payload,
       });
       toast.add({
         title: 'បានបង្កើតមុខម្ហូបថ្មី',
@@ -275,7 +417,7 @@ function formatRiel(usd: number): string {
           <span>Menu & Categories Management</span>
         </h1>
         <p class="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
-          គ្រប់គ្រងមុខម្ហូប (Item Name, Category, Price, និង Cloudinary Image) សម្រាប់ភោជនីយដ្ឋាន
+          គ្រប់គ្រងមុខម្ហូប (Item Name, Category, Price & Multi-Sizes, និង Cloudinary Image) សម្រាប់ភោជនីយដ្ឋាន
         </p>
       </div>
 
@@ -283,7 +425,7 @@ function formatRiel(usd: number): string {
         <!-- New Item Button -->
         <button
           type="button"
-          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
           @click="openCreateItemModal"
         >
           <UIcon name="i-heroicons-plus-circle" class="w-5 h-5" />
@@ -320,7 +462,7 @@ function formatRiel(usd: number): string {
 
       <div class="p-4 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Avg Price (តម្លៃមធ្យម)</span>
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Avg Base Price</span>
           <UIcon name="i-heroicons-currency-dollar" class="w-4 h-4 text-blue-500" />
         </div>
         <p class="text-2xl font-black mt-2 text-gray-900 dark:text-white">${{ avgPrice }}</p>
@@ -331,7 +473,7 @@ function formatRiel(usd: number): string {
     <div class="flex border-b border-gray-200 dark:border-gray-800">
       <button
         type="button"
-        class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors"
+        class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer"
         :class="[
           activeTab === 'items'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
@@ -346,7 +488,7 @@ function formatRiel(usd: number): string {
 
       <button
         type="button"
-        class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors"
+        class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer"
         :class="[
           activeTab === 'categories'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
@@ -378,7 +520,7 @@ function formatRiel(usd: number): string {
           <span class="text-xs text-gray-500 shrink-0">Filter:</span>
           <select
             v-model="selectedCategoryFilter"
-            class="px-3 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+            class="px-3 py-2 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
           >
             <option value="all">All Categories</option>
             <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
@@ -433,17 +575,17 @@ function formatRiel(usd: number): string {
 
           <!-- Body Info -->
           <div class="p-4 flex-1 flex flex-col justify-between">
-            <div class="space-y-1.5">
+            <div class="space-y-2">
               <div class="flex items-start justify-between gap-2">
                 <h3 class="font-bold text-base text-gray-900 dark:text-white leading-tight">
                   {{ item.name }}
                 </h3>
                 <div class="text-right shrink-0">
-                  <span class="text-lg font-black text-primary-600 dark:text-primary-400">
-                    ${{ Number(item.price).toFixed(2) }}
+                  <span class="text-base sm:text-lg font-black text-primary-600 dark:text-primary-400">
+                    {{ getItemPriceInfo(item).formatted }}
                   </span>
                   <span class="block text-[11px] text-gray-400 font-mono">
-                    ~{{ formatRiel(Number(item.price)) }} ៛
+                    {{ getItemPriceInfo(item).riel }}
                   </span>
                 </div>
               </div>
@@ -451,18 +593,35 @@ function formatRiel(usd: number): string {
               <p v-if="item.description" class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                 {{ item.description }}
               </p>
+
+              <!-- Variant Badges (Options & Sizes) -->
+              <div v-if="item.hasVariants && item.variants && item.variants.length > 0" class="pt-1 flex flex-wrap gap-1.5">
+                <span
+                  v-for="(v, vIdx) in item.variants"
+                  :key="vIdx"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-medium bg-primary-50/80 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 border border-primary-200/60 dark:border-primary-800/60 shadow-2xs"
+                >
+                  <span class="text-gray-600 dark:text-gray-300">{{ v.label }}:</span>
+                  <span class="font-bold font-mono text-primary-700 dark:text-primary-300">${{ Number(v.price).toFixed(2) }}</span>
+                </span>
+              </div>
             </div>
 
             <!-- Footer Action Buttons -->
             <div class="pt-4 mt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <span class="text-[11px] text-gray-400 font-mono">
-                ID: {{ item.id }}
-              </span>
+              <div class="flex items-center gap-1.5">
+                <span v-if="item.hasVariants" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+                  {{ item.variants?.length ?? 0 }} Sizes
+                </span>
+                <span v-else class="text-[11px] text-gray-400 font-mono">
+                  ID: {{ item.id }}
+                </span>
+              </div>
 
               <div class="flex items-center gap-1.5">
                 <button
                   type="button"
-                  class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
                   title="Edit Dish"
                   @click="openEditItemModal(item)"
                 >
@@ -470,7 +629,7 @@ function formatRiel(usd: number): string {
                 </button>
                 <button
                   type="button"
-                  class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition-colors"
+                  class="p-2 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition-colors cursor-pointer"
                   title="Delete Dish"
                   @click="handleDeleteItem(item.id, item.name)"
                 >
@@ -496,7 +655,7 @@ function formatRiel(usd: number): string {
         </p>
         <button
           type="button"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-500 shadow-sm"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-500 shadow-sm cursor-pointer"
           @click="openCreateItemModal"
         >
           <UIcon name="i-heroicons-plus-circle" class="w-4 h-4" />
@@ -546,7 +705,7 @@ function formatRiel(usd: number): string {
           <button
             type="submit"
             :disabled="isSubmittingCat"
-            class="w-full py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-colors flex items-center justify-center gap-2"
+            class="w-full py-2.5 rounded-xl text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <UIcon v-if="isSubmittingCat" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <span>Create Category</span>
@@ -581,7 +740,7 @@ function formatRiel(usd: number): string {
               </span>
               <button
                 type="button"
-                class="p-2 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                class="p-2 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
                 title="Delete Category"
                 @click="handleDeleteCategory(cat)"
               >
@@ -605,11 +764,11 @@ function formatRiel(usd: number): string {
             <h2 class="text-lg font-bold text-gray-900 dark:text-white">
               {{ isEditing ? 'Edit Dish (កែប្រែមុខម្ហូប)' : 'Add New Dish (បង្កើតមុខម្ហូបថ្មី)' }}
             </h2>
-            <p class="text-xs text-gray-500">បញ្ចូលឈ្មោះម្ហូប, ប្រភេទ, តម្លៃ និងរូបភាព Cloudinary</p>
+            <p class="text-xs text-gray-500">បញ្ចូលឈ្មោះម្ហូប, ប្រភេទ, តម្លៃ/ទំហំ និងរូបភាព Cloudinary</p>
           </div>
           <button
             type="button"
-            class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
             @click="isItemModalOpen = false"
           >
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
@@ -632,26 +791,53 @@ function formatRiel(usd: number): string {
             />
           </div>
 
-          <!-- 2. Category & Price row -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- Category select -->
-            <div class="space-y-1.5">
-              <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Category (ប្រភេទមុខម្ហូប)
+          <!-- 2. Category -->
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              Category (ប្រភេទមុខម្ហូប)
+            </label>
+            <select
+              v-model="itemForm.categoryId"
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 cursor-pointer"
+            >
+              <option value="">-- No Category --</option>
+              <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
+                {{ cat.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- 3. Pricing & Variants Section -->
+          <div class="p-4 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <UIcon name="i-heroicons-tag" class="w-4 h-4 text-primary-500" />
+                  <span>ទម្រង់តម្លៃ (Pricing Structure)</span>
+                </p>
+                <p class="text-[11px] text-gray-500">
+                  ជ្រើសរើសថាតើមុខម្ហូបមានតម្លៃទោល ឬមានច្រើនទំហំ/តម្លៃ (Sizes / Options)
+                </p>
+              </div>
+
+              <!-- Switch -->
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  v-model="itemForm.hasVariants"
+                  type="checkbox"
+                  class="sr-only peer"
+                />
+                <div
+                  class="w-11 h-6 bg-gray-200 peer-focus:outline-hidden rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"
+                ></div>
+                <span class="ml-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  {{ itemForm.hasVariants ? 'ច្រើនតម្លៃ (Variants)' : 'តម្លៃទោល (Single)' }}
+                </span>
               </label>
-              <select
-                v-model="itemForm.categoryId"
-                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">-- No Category --</option>
-                <option v-for="cat in categoriesList" :key="cat.id" :value="cat.id">
-                  {{ cat.name }}
-                </option>
-              </select>
             </div>
 
-            <!-- Price Input -->
-            <div class="space-y-1.5">
+            <!-- If Single Price -->
+            <div v-if="!itemForm.hasVariants" class="space-y-1.5 pt-1">
               <div class="flex items-center justify-between">
                 <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
                   Price in USD ($) *
@@ -668,14 +854,97 @@ function formatRiel(usd: number): string {
                   step="0.25"
                   min="0"
                   placeholder="0.00"
-                  class="w-full pl-8 pr-4 py-2.5 text-sm rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400"
+                  class="w-full pl-8 pr-4 py-2.5 text-sm rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400"
                   required
                 />
               </div>
             </div>
+
+            <!-- If Multiple Prices / Variants -->
+            <div v-else class="space-y-3 pt-1">
+              <!-- Quick Presets -->
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ (Presets):</span>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                  @click="applyPreset('sizes')"
+                >
+                  <UIcon name="i-heroicons-scale" class="w-3.5 h-3.5 text-primary-500" />
+                  <span>🍽️ S / M / L (តូច/កណ្តាល/ធំ)</span>
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                  @click="applyPreset('drinks')"
+                >
+                  <UIcon name="i-heroicons-beaker" class="w-3.5 h-3.5 text-primary-500" />
+                  <span>☕ ក្តៅ / ត្រជាក់ / ក្រឡុក</span>
+                </button>
+              </div>
+
+              <!-- Variant Rows -->
+              <div class="space-y-2">
+                <div
+                  v-for="(variant, vIdx) in itemForm.variants"
+                  :key="vIdx"
+                  class="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200/90 dark:border-gray-700/80 shadow-2xs"
+                >
+                  <div class="flex-1">
+                    <input
+                      v-model="variant.label"
+                      type="text"
+                      placeholder="e.g. ចានតូច (Small), ត្រជាក់ (Iced)..."
+                      class="w-full px-3 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-medium"
+                      required
+                    />
+                  </div>
+
+                  <div class="w-32 relative">
+                    <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">$</span>
+                    <input
+                      v-model.number="variant.price"
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      placeholder="0.00"
+                      class="w-full pl-6 pr-2 py-1.5 text-xs rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold text-primary-600 dark:text-primary-400 font-mono text-right"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    class="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                    title="Remove variant"
+                    :disabled="itemForm.variants.length <= 1"
+                    :class="{ 'opacity-30 cursor-not-allowed': itemForm.variants.length <= 1 }"
+                    @click="removeVariantOption(vIdx)"
+                  >
+                    <UIcon name="i-heroicons-trash" class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- Add Variant Button -->
+              <div class="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-50 dark:bg-primary-950/50 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 border border-primary-200/70 dark:border-primary-800/70 transition-colors cursor-pointer"
+                  @click="addVariantOption"
+                >
+                  <UIcon name="i-heroicons-plus" class="w-3.5 h-3.5" />
+                  <span>+ Add Variant / Size Option</span>
+                </button>
+
+                <span class="text-[11px] text-gray-400 font-mono">
+                  {{ itemForm.variants.length }} options
+                </span>
+              </div>
+            </div>
           </div>
 
-          <!-- 3. Image Upload (+ img 1) using Reka UI Component -->
+          <!-- 4. Image Upload (+ img 1) using Reka UI Component -->
           <div class="space-y-1.5">
             <UploadImageUploader
               v-model="itemForm.imageUrl"
@@ -686,7 +955,7 @@ function formatRiel(usd: number): string {
             />
           </div>
 
-          <!-- 4. Description -->
+          <!-- 5. Description -->
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
               Description (ការពិពណ៌នាសង្ខេប)
@@ -699,7 +968,7 @@ function formatRiel(usd: number): string {
             ></textarea>
           </div>
 
-          <!-- 5. Availability Switch -->
+          <!-- 6. Availability Switch -->
           <div class="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/60">
             <div>
               <p class="text-sm font-semibold text-gray-900 dark:text-white">Is Available (មានលក់)</p>
@@ -717,7 +986,7 @@ function formatRiel(usd: number): string {
         <div class="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3 bg-gray-50/50 dark:bg-gray-900/50">
           <button
             type="button"
-            class="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+            class="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
             @click="isItemModalOpen = false"
           >
             Cancel
@@ -726,7 +995,7 @@ function formatRiel(usd: number): string {
           <button
             type="button"
             :disabled="isSubmitting"
-            class="px-5 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white rounded-xl shadow-xs transition-colors flex items-center gap-2"
+            class="px-5 py-2 text-sm font-semibold bg-primary-600 hover:bg-primary-500 text-white rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
             @click="handleSaveItem"
           >
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />

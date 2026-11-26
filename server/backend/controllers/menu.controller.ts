@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import { createSuccessResponse, createErrorResponse, type MenuItem } from '@restaurant-menu/shared';
-import { eq, desc, and, like } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { getDb } from '../db';
 import { menuItems, categories } from '../db/schema';
 import type { AppEnv } from '../types';
@@ -12,11 +12,17 @@ const mockMenuItems: MenuItem[] = [
     name: 'Beef Lok Lak (ឡុកឡាក់សាច់គោ)',
     categoryId: 'cat_main',
     categoryName: 'Main Course (ម្ហូបកុម្ម៉ង់)',
-    price: 6.5,
+    price: 4.5,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
     description: 'Tender stir-fried beef served with fresh lettuce, tomatoes, cucumbers, and black pepper lime dipping sauce.',
     isAvailable: true,
+    hasVariants: true,
+    variants: [
+      { label: 'ចានតូច (Small)', price: 4.5 },
+      { label: 'ចានកណ្តាល (Medium)', price: 6.5 },
+      { label: 'ចានធំ (Large)', price: 8.5 },
+    ],
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -30,19 +36,27 @@ const mockMenuItems: MenuItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=600&q=80',
     description: 'Traditional Khmer steamed fish curry in banana leaf with coconut milk and kroeung paste.',
     isAvailable: true,
+    hasVariants: false,
+    variants: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   },
   {
     id: 'item_03',
-    name: 'Khmer Iced Coffee with Milk (កាហ្វេទឹកដោះគោទឹកកក)',
+    name: 'Khmer Coffee with Milk (កាហ្វេទឹកដោះគោ)',
     categoryId: 'cat_drinks',
     categoryName: 'Beverages (ភេសជ្ជៈ)',
-    price: 2.0,
+    price: 1.5,
     currency: 'USD',
     imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80',
-    description: 'Rich dark drip coffee brewed with sweetened condensed milk and served over crushed ice.',
+    description: 'Rich dark drip coffee brewed with sweetened condensed milk.',
     isAvailable: true,
+    hasVariants: true,
+    variants: [
+      { label: 'Hot (ក្តៅ)', price: 1.5 },
+      { label: 'Iced (ត្រជាក់)', price: 2.0 },
+      { label: 'Frappe (ក្រឡុក)', price: 2.75 },
+    ],
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -56,6 +70,8 @@ const mockMenuItems: MenuItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=600&q=80',
     description: 'Sweet sticky coconut rice served with ripe sweet mango slices and toasted sesame seeds.',
     isAvailable: true,
+    hasVariants: false,
+    variants: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -90,6 +106,8 @@ export async function listMenuItemsController(c: Context<AppEnv>) {
         imageUrl: menuItems.imageUrl,
         description: menuItems.description,
         isAvailable: menuItems.isAvailable,
+        hasVariants: menuItems.hasVariants,
+        variants: menuItems.variants,
         createdAt: menuItems.createdAt,
         updatedAt: menuItems.updatedAt,
         categoryName: categories.name,
@@ -124,7 +142,18 @@ export async function createMenuItemController(c: Context<AppEnv>) {
     return c.json(createErrorResponse('VALIDATION_ERROR', 'Item name is required'), 400);
   }
 
-  const price = Number(body.price);
+  const hasVariants = Boolean(body.hasVariants);
+  const variants = Array.isArray(body.variants)
+    ? body.variants
+        .filter((v: any) => v && v.label && !isNaN(Number(v.price)))
+        .map((v: any) => ({ label: String(v.label).trim(), price: Number(v.price) }))
+    : [];
+
+  let price = Number(body.price);
+  if (hasVariants && variants.length > 0) {
+    price = Math.min(...variants.map((v) => v.price));
+  }
+
   if (isNaN(price) || price < 0) {
     return c.json(createErrorResponse('VALIDATION_ERROR', 'Valid price is required'), 400);
   }
@@ -139,6 +168,8 @@ export async function createMenuItemController(c: Context<AppEnv>) {
     imageUrl: body.imageUrl || null,
     description: body.description ?? '',
     isAvailable: body.isAvailable ?? true,
+    hasVariants,
+    variants,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -175,6 +206,22 @@ export async function updateMenuItemController(c: Context<AppEnv>) {
   if (body.imageUrl !== undefined) updateData.imageUrl = body.imageUrl;
   if (body.description !== undefined) updateData.description = body.description;
   if (body.isAvailable !== undefined) updateData.isAvailable = Boolean(body.isAvailable);
+
+  if (body.hasVariants !== undefined) {
+    updateData.hasVariants = Boolean(body.hasVariants);
+  }
+
+  if (body.variants !== undefined) {
+    updateData.variants = Array.isArray(body.variants)
+      ? body.variants
+          .filter((v: any) => v && v.label && !isNaN(Number(v.price)))
+          .map((v: any) => ({ label: String(v.label).trim(), price: Number(v.price) }))
+      : [];
+
+    if (updateData.hasVariants && updateData.variants.length > 0) {
+      updateData.price = Math.min(...updateData.variants.map((v: any) => v.price));
+    }
+  }
 
   if (!c.env?.DB) {
     const idx = mockMenuItems.findIndex((i) => i.id === id);
