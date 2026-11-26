@@ -399,6 +399,18 @@ export const CreateOrderInputSchema = z.object({
 
 export type CreateOrderInput = z.infer<typeof CreateOrderInputSchema>;
 
+export const UpdateOrderInputSchema = z.object({
+  tableNumber: z.string().optional(),
+  items: z.array(OrderItemSchema).optional(),
+  discount: z.coerce.number().min(0).optional(),
+  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional(),
+  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).optional(),
+  cashierName: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export type UpdateOrderInput = z.infer<typeof UpdateOrderInputSchema>;
+
 export interface TopSellingItem {
   name: string;
   variantLabel?: string;

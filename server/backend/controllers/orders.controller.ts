@@ -3,11 +3,12 @@ import {
   createSuccessResponse,
   createErrorResponse,
   CreateOrderInputSchema,
+  UpdateOrderInputSchema,
   type Order,
   type DailyReport,
   type TopSellingItem,
 } from '@restaurant-menu/shared';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { getDb } from '../db';
 import { orders } from '../db/schema/orders';
 import type { AppEnv } from '../types';
@@ -197,6 +198,110 @@ export async function createOrderController(c: Context<AppEnv>) {
     return c.json(createSuccessResponse(newOrder), 201);
   } catch (err: any) {
     return c.json(createErrorResponse('DB_ERROR', err.message || 'Failed to create order'), 500);
+  }
+}
+
+export async function getActiveOrdersController(c: Context<AppEnv>) {
+  if (!c.env?.DB) {
+    const active = mockOrders.filter((o) => o.paymentStatus === 'pending');
+    return c.json(createSuccessResponse(active), 200);
+  }
+
+  try {
+    const db = getDb(c.env.DB);
+    const rows = await db
+      .select()
+      .from(orders)
+      .where(eq(orders.paymentStatus, 'pending'))
+      .orderBy(desc(orders.createdAt))
+      .all();
+    return c.json(createSuccessResponse(rows as Order[]), 200);
+  } catch (err: any) {
+    return c.json(createErrorResponse('DB_ERROR', err.message || 'Failed to list active orders'), 500);
+  }
+}
+
+export async function updateOrderController(c: Context<AppEnv>) {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const parsed = UpdateOrderInputSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json(
+      createErrorResponse('VALIDATION_ERROR', parsed.error.issues[0]?.message || 'Invalid update data'),
+      400
+    );
+  }
+
+  const updates = parsed.data;
+
+  if (!c.env?.DB) {
+    const idx = mockOrders.findIndex((o) => o.id === id);
+    if (idx === -1) {
+      return c.json(createErrorResponse('NOT_FOUND', 'Order not found'), 404);
+    }
+
+    const current = mockOrders[idx]!;
+    const newItems = updates.items
+      ? updates.items.map((it) => ({
+          ...it,
+          subtotal: Number((it.price * it.quantity).toFixed(2)),
+        }))
+      : current.items;
+
+    const subtotal = Number(newItems.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
+    const discount = updates.discount !== undefined ? Number(updates.discount) : current.discount;
+    const totalAmount = Math.max(0, Number((subtotal - discount).toFixed(2)));
+
+    const updated: Order = {
+      ...current,
+      ...updates,
+      items: newItems,
+      subtotal,
+      discount,
+      totalAmount,
+      updatedAt: new Date(),
+    };
+
+    mockOrders[idx] = updated;
+    return c.json(createSuccessResponse(updated), 200);
+  }
+
+  try {
+    const db = getDb(c.env.DB);
+    const existing = await db.select().from(orders).where(eq(orders.id, id)).get();
+
+    if (!existing) {
+      return c.json(createErrorResponse('NOT_FOUND', 'Order not found'), 404);
+    }
+
+    const currentOrder = existing as unknown as Order;
+    const newItems = updates.items
+      ? updates.items.map((it) => ({
+          ...it,
+          subtotal: Number((it.price * it.quantity).toFixed(2)),
+        }))
+      : currentOrder.items;
+
+    const subtotal = Number(newItems.reduce((acc, curr) => acc + curr.subtotal, 0).toFixed(2));
+    const discount = updates.discount !== undefined ? Number(updates.discount) : currentOrder.discount;
+    const totalAmount = Math.max(0, Number((subtotal - discount).toFixed(2)));
+
+    const updatePayload: any = {
+      ...updates,
+      items: newItems,
+      subtotal,
+      discount,
+      totalAmount,
+      updatedAt: new Date(),
+    };
+
+    await db.update(orders).set(updatePayload).where(eq(orders.id, id));
+    const finalOrder = await db.select().from(orders).where(eq(orders.id, id)).get();
+
+    return c.json(createSuccessResponse(finalOrder as unknown as Order), 200);
+  } catch (err: any) {
+    return c.json(createErrorResponse('DB_ERROR', err.message || 'Failed to update order'), 500);
   }
 }
 
