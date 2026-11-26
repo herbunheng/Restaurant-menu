@@ -354,3 +354,69 @@ export type CreateMenuItemInput = z.infer<typeof CreateMenuItemInputSchema>;
 export const UpdateMenuItemInputSchema = CreateMenuItemInputSchema.partial();
 export type UpdateMenuItemInput = z.infer<typeof UpdateMenuItemInputSchema>;
 
+/**
+ * Order & POS Schemas & Types
+ */
+export const OrderItemSchema = z.object({
+  menuItemId: z.string(),
+  name: z.string(),
+  variantLabel: z.string().optional().default(''),
+  price: z.coerce.number().min(0),
+  quantity: z.coerce.number().min(1),
+  subtotal: z.coerce.number().min(0),
+  note: z.string().optional().default(''),
+});
+
+export type OrderItem = z.infer<typeof OrderItemSchema>;
+
+export const OrderSchema = z.object({
+  id: z.string(),
+  orderNumber: z.number(),
+  tableNumber: z.string(),
+  items: z.array(OrderItemSchema),
+  subtotal: z.number(),
+  discount: z.number().default(0),
+  totalAmount: z.number(),
+  paymentMethod: z.enum(['cash', 'khqr', 'card']).default('cash'),
+  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).default('paid'),
+  cashierName: z.string().optional().default('Cashier'),
+  note: z.string().nullable().optional(),
+  createdAt: z.union([z.date(), z.string()]).nullable().optional(),
+  updatedAt: z.union([z.date(), z.string()]).nullable().optional(),
+});
+
+export type Order = z.infer<typeof OrderSchema>;
+
+export const CreateOrderInputSchema = z.object({
+  tableNumber: z.string().min(1, 'Table number is required'),
+  items: z.array(OrderItemSchema).min(1, 'Order must contain at least one item'),
+  discount: z.coerce.number().min(0).optional().default(0),
+  paymentMethod: z.enum(['cash', 'khqr', 'card']).optional().default('cash'),
+  paymentStatus: z.enum(['paid', 'pending', 'cancelled']).optional().default('paid'),
+  cashierName: z.string().optional().default('Cashier'),
+  note: z.string().optional().default(''),
+});
+
+export type CreateOrderInput = z.infer<typeof CreateOrderInputSchema>;
+
+export interface TopSellingItem {
+  name: string;
+  variantLabel?: string;
+  totalQuantity: number;
+  totalRevenue: number;
+}
+
+export interface DailyReport {
+  date: string;
+  totalOrders: number;
+  totalRevenueUSD: number;
+  totalRevenueKHR: number;
+  paymentBreakdown: {
+    cashUSD: number;
+    khqrUSD: number;
+    cardUSD: number;
+  };
+  topSellingItems: TopSellingItem[];
+  orders: Order[];
+}
+

@@ -39,13 +39,29 @@ function formatRiel(usd: number): string {
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <NuxtLink
+          to="/admin/pos"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all hover:scale-[1.02]"
+        >
+          <UIcon name="i-heroicons-calculator" class="w-4 h-4" />
+          <span>Cashier POS (កត់ Order)</span>
+        </NuxtLink>
+
+        <NuxtLink
+          to="/admin/reports"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-all hover:scale-[1.02]"
+        >
+          <UIcon name="i-heroicons-chart-bar-square" class="w-4 h-4" />
+          <span>Daily Reports (បិទហាង)</span>
+        </NuxtLink>
+
         <NuxtLink
           to="/admin/menu"
-          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 transition-all"
         >
-          <UIcon name="i-heroicons-plus-circle" class="w-5 h-5" />
-          <span>Manage Menu</span>
+          <UIcon name="i-heroicons-book-open" class="w-4 h-4" />
+          <span>Menu</span>
         </NuxtLink>
       </div>
     </div>

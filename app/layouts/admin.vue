@@ -6,7 +6,9 @@ const isMobileMenuOpen = ref(false);
 
 const adminNav = [
   { label: 'Overview', icon: 'i-heroicons-chart-pie', to: '/admin' },
-  { label: 'Menu & Categories', icon: 'i-heroicons-book-open', to: '/admin/menu' },
+  { label: 'Cashier POS (កត់ត្រា)', icon: 'i-heroicons-calculator', to: '/admin/pos' },
+  { label: 'Menu & Dishes', icon: 'i-heroicons-book-open', to: '/admin/menu' },
+  { label: 'Daily Reports (របាយការណ៍)', icon: 'i-heroicons-chart-bar-square', to: '/admin/reports' },
   { label: 'Users & Roles', icon: 'i-heroicons-users', to: '/admin/users' },
   { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/logs' },
   { label: 'Settings', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/settings' },

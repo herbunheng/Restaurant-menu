@@ -15,6 +15,7 @@ import { auditLogsRouter } from './routes/audit_logs';
 import { pushRouter } from './routes/push';
 import { categoriesRouter } from './routes/categories';
 import { menuRouter } from './routes/menu';
+import { ordersRouter } from './routes/orders';
 import type { AppEnv } from './types';
 
 export function createApp() {
@@ -63,6 +64,7 @@ export function createApp() {
   app.route('/api/push', pushRouter);
   app.route('/api/categories', categoriesRouter);
   app.route('/api/menu', menuRouter);
+  app.route('/api/orders', ordersRouter);
 
   // Root Endpoint
   app.get('/', (c) => {
