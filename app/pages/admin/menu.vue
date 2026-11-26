@@ -770,7 +770,7 @@ function formatRiel(usd: number): string {
             <div class="flex items-center justify-between">
               <p class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
                 <UIcon name="i-heroicons-tag" class="w-4 h-4 text-primary-500" />
-                <span>ទម្រង់តម្លៃ (Pricing Structure)</span>
+                <span>ទម្រង់តម្លៃ</span>
               </p>
 
               <!-- Switch -->
@@ -780,7 +780,7 @@ function formatRiel(usd: number): string {
                   class="w-11 h-6 bg-gray-200 peer-focus:outline-hidden rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600">
                 </div>
                 <span class="ml-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  {{ itemForm.hasVariants ? 'ច្រើនតម្លៃ (Variants)' : 'តម្លៃទោល (Single)' }}
+                  {{ itemForm.hasVariants ? 'ច្រើនតម្លៃ' : 'តម្លៃទោល' }}
                 </span>
               </label>
             </div>
@@ -789,7 +789,7 @@ function formatRiel(usd: number): string {
             <div v-if="!itemForm.hasVariants" class="space-y-1.5 pt-1">
               <div class="flex items-center justify-between">
                 <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  Price in USD ($) *
+                  តម្លៃគិតជាដុល្លារ ($) *
                 </label>
                 <span class="text-[11px] text-gray-400 font-mono">
                   ≈ {{ formatRiel(itemForm.price || 0) }} ៛
@@ -807,14 +807,14 @@ function formatRiel(usd: number): string {
             <div v-else class="space-y-3 pt-1">
               <!-- Quick Presets -->
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ (Presets):</span>
+                <span class="text-[11px] text-gray-500 font-medium">គំរូទូទៅ:</span>
                 <button
                   type="button"
                   class="px-2.5 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
                   @click="applyPreset('sizes')"
                 >
                   <UIcon name="i-heroicons-scale" class="w-3.5 h-3.5 text-primary-500" />
-                  <span>🍽️ S / M / L (តូច/កណ្តាល/ធំ)</span>
+                  <span>🍽️ តូច / កណ្តាល / ធំ</span>
                 </button>
                 <button
                   type="button"

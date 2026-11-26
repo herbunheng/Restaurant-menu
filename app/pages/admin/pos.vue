@@ -30,6 +30,15 @@ const menuList = computed(() => (menuData.value || []).filter((i) => i.isAvailab
 const categoriesList = computed(() => categoriesData.value || []);
 const activeOrders = computed(() => activeOrdersData.value || []);
 
+// Quick Map: menuItemId -> MenuItem
+const menuMap = computed(() => {
+  const map = new Map<string, MenuItem>();
+  for (const item of (menuData.value || [])) {
+    map.set(item.id, item);
+  }
+  return map;
+});
+
 // Active Tables Dictionary: tableNumber -> Order
 const activeTablesMap = computed(() => {
   const map = new Map<string, Order>();
@@ -51,7 +60,7 @@ const tableOptions = [
   'តុ 8',
   'តុ 9',
   'តុ 10',
-  'ខ្ចប់ (Takeaway)',
+  'ខ្ចប់',
 ];
 const selectedTable = ref('តុ 1');
 const customTableInput = ref('');
@@ -158,7 +167,7 @@ const confirmDialog = ref<ConfirmDialogState>({
   title: '',
   message: '',
   confirmText: 'យល់ព្រម',
-  onConfirm: () => {},
+  onConfirm: () => { },
 });
 
 function openConfirmDialog(options: {
@@ -330,7 +339,7 @@ function addItemToCart(menuItemId: string, name: string, variantLabel: string, p
     // តុដែលបានរក្សាទុក (Hold / តុជាប់) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
     openConfirmDialog({
       type: 'add',
-      title: 'បញ្ជាក់ការបន្ថែមមុខម្ហូប (Add Item)',
+      title: 'បញ្ជាក់ការបន្ថែមមុខម្ហូប',
       message: `តើអ្នកពិតជាចង់បន្ថែមមុខម្ហូប "${name}" ចូលក្នុង ${table} មែនទេ?`,
       confirmText: 'យល់ព្រមបន្ថែម',
       details: {
@@ -381,7 +390,7 @@ function updateQuantity(index: number, delta: number) {
       const isWillDelete = item.quantity + delta <= 0;
       openConfirmDialog({
         type: 'remove',
-        title: isWillDelete ? 'បញ្ជាក់ការដកមុខម្ហូបចេញ (Remove)' : 'បញ្ជាក់ការបន្ថយចំនួន (Decrease)',
+        title: isWillDelete ? 'បញ្ជាក់ការដកមុខម្ហូបចេញ' : 'បញ្ជាក់ការបន្ថយចំនួន',
         message: isWillDelete
           ? `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`
           : `តើអ្នកពិតជាចង់បន្ថយចំនួន "${item.name}" ពី ${item.quantity} មកនៅត្រឹម ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
@@ -399,7 +408,7 @@ function updateQuantity(index: number, delta: number) {
       // ករណីបន្ថែមចំនួន
       openConfirmDialog({
         type: 'add',
-        title: 'បញ្ជាក់ការបន្ថែមចំនួន (Increase)',
+        title: 'បញ្ជាក់ការបន្ថែមចំនួន',
         message: `តើអ្នកពិតជាចង់បន្ថែមចំនួន "${item.name}" ពី ${item.quantity} ទៅ ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
         confirmText: 'យល់ព្រមបន្ថែម',
         details: {
@@ -429,13 +438,39 @@ function executeQuantityChange(index: number, delta: number) {
   }
 }
 
+function handleRemoveItem(index: number) {
+  const item = cart.value[index];
+  if (!item) return;
+
+  const table = currentSelectedTableName.value;
+
+  if (isCurrentTableOccupied.value) {
+    openConfirmDialog({
+      type: 'remove',
+      title: 'បញ្ជាក់ការដកមុខម្ហូបចេញ',
+      message: `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`,
+      confirmText: 'យល់ព្រមដកចេញ',
+      details: {
+        name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
+        subtext: `តុ៖ ${table} • បរិមាណ៖ ${item.quantity}`,
+      },
+      onConfirm: () => {
+        cart.value.splice(index, 1);
+      },
+    });
+    return;
+  }
+
+  cart.value.splice(index, 1);
+}
+
 function clearCart() {
   if (cart.value.length === 0) return;
 
   const table = currentSelectedTableName.value;
   openConfirmDialog({
     type: 'remove',
-    title: 'សម្អាតបញ្ជីកុម្ម៉ង់ (Clear Order)',
+    title: 'សម្អាតបញ្ជីកុម្ម៉ង់',
     message: isCurrentTableOccupied.value
       ? `តើអ្នកពិតជាចង់លុបសម្អាតមុខម្ហូបទាំងអស់ចេញពីកន្ត្រកនៃ ${table} មែនទេ?`
       : 'តើអ្នកពិតជាចង់សម្អាតមុខម្ហូបទាំងអស់ក្នុងកន្ត្រកនេះមែនទេ?',
@@ -468,10 +503,10 @@ async function handleSavePendingOrder() {
 
   openConfirmDialog({
     type: isOccupied ? 'add' : 'hold',
-    title: isOccupied ? 'បញ្ជាក់ការថែមម្ហូបចូលតុ' : 'បញ្ជាក់ការរក្សាទុកតុ (Hold)',
+    title: isOccupied ? 'បញ្ជាក់ការថែមម្ហូបចូលតុ' : 'បញ្ជាក់ការរក្សាទុកតុ',
     message: isOccupied
       ? `តើអ្នកពិតជាចង់រក្សាទុកការបន្ថែមមុខម្ហូបចូលក្នុង ${table} និងផ្ញើទៅផ្ទះបាយមែនទេ?`
-      : `តើអ្នកពិតជាចង់រក្សាទុកការកុម្ម៉ង់សម្រាប់ ${table} (Hold Table) មែនទេ?`,
+      : `តើអ្នកពិតជាចង់រក្សាទុកការកុម្ម៉ង់សម្រាប់ ${table} មែនទេ?`,
     confirmText: isOccupied ? 'យល់ព្រមថែមម្ហូប' : 'យល់ព្រមរក្សាទុកតុ',
     details: {
       name: `មុខម្ហូប ${cart.value.length} មុខ (${cart.value.reduce((a, b) => a + b.quantity, 0)} ចាន)`,
@@ -677,7 +712,8 @@ function handlePrint() {
 <template>
   <div class="h-[calc(100vh-5.5rem)] flex flex-col lg:flex-row gap-4 overflow-hidden">
     <!-- LEFT SIDE: MENU & DISH PICKER (65% width on desktop) -->
-    <div class="flex-1 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden">
+    <div
+      class="flex-1 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden">
       <!-- Top Bar: Table Selector with Live Occupied Badges -->
       <div class="p-4 border-b border-gray-100 dark:border-gray-800 space-y-3 shrink-0">
         <!-- Title and Table Selector Buttons -->
@@ -685,12 +721,12 @@ function handlePrint() {
           <div class="flex items-center justify-between">
             <h1 class="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
               <UIcon name="i-heroicons-calculator" class="w-6 h-6 text-primary-600 dark:text-primary-400" />
-              <span>Cashier POS</span>
+              <span>កន្លែងគិតលុយ</span>
             </h1>
 
             <div class="flex items-center gap-2 text-xs">
               <span class="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> តុទំនេរ (New)
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> តុទំនេរ
               </span>
               <span class="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
                 <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> កំពុងញ៉ាំ
@@ -703,91 +739,66 @@ function handlePrint() {
 
           <!-- Table Buttons with Live Status -->
           <div class="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-            <button
-              v-for="t in tableOptions"
-              :key="t"
-              type="button"
+            <button v-for="t in tableOptions" :key="t" type="button"
               class="px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border"
               :class="[
                 currentSelectedTableName === t && !customTableInput
                   ? activeTablesMap.get(t)?.paymentStatus === 'billed'
                     ? 'border-purple-600 bg-purple-600 text-white shadow-xs scale-[1.02]'
                     : activeTablesMap.get(t)?.paymentStatus === 'pending'
-                    ? 'border-amber-600 bg-amber-600 text-white shadow-xs scale-[1.02]'
-                    : 'border-primary-600 bg-primary-600 text-white shadow-xs scale-[1.02]'
+                      ? 'border-amber-600 bg-amber-600 text-white shadow-xs scale-[1.02]'
+                      : 'border-primary-600 bg-primary-600 text-white shadow-xs scale-[1.02]'
                   : activeTablesMap.get(t)?.paymentStatus === 'billed'
-                  ? 'border-purple-300 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 hover:bg-purple-100'
-                  : activeTablesMap.get(t)?.paymentStatus === 'pending'
-                  ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100'
-                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100',
-              ]"
-              @click="handleSelectTable(t)"
-            >
+                    ? 'border-purple-300 dark:border-purple-800/80 bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 hover:bg-purple-100'
+                    : activeTablesMap.get(t)?.paymentStatus === 'pending'
+                      ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100'
+                      : 'border-gray-200 dark:border-gray-700/80 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100',
+              ]" @click="handleSelectTable(t)">
               <span>{{ t }}</span>
               <!-- Occupied / Billed indicator -->
-              <span
-                v-if="activeTablesMap.has(t)"
-                class="px-1.5 py-0.2 rounded-md text-[9px] font-black"
-                :class="[
-                  currentSelectedTableName === t
-                    ? 'bg-black/30 text-white'
-                    : activeTablesMap.get(t)?.paymentStatus === 'billed'
+              <span v-if="activeTablesMap.has(t)" class="px-1.5 py-0.2 rounded-md text-[9px] font-black" :class="[
+                currentSelectedTableName === t
+                  ? 'bg-black/30 text-white'
+                  : activeTablesMap.get(t)?.paymentStatus === 'billed'
                     ? 'bg-purple-600 text-white'
                     : 'bg-amber-500 text-white',
-                ]"
-              >
-                {{ activeTablesMap.get(t)?.paymentStatus === 'billed' ? 'មើលបុង' : `${activeTablesMap.get(t)?.items.length} មុខ` }}
+              ]">
+                {{ activeTablesMap.get(t)?.paymentStatus === 'billed' ? 'មើលបុង' :
+                  `${activeTablesMap.get(t)?.items.length} មុខ` }}
               </span>
             </button>
 
             <!-- Custom Table input -->
-            <input
-              v-model="customTableInput"
-              type="text"
-              placeholder="តុផ្សេង..."
-              class="w-20 px-2 py-1 text-xs rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold shrink-0"
-            />
+            <input v-model="customTableInput" type="text" placeholder="តុផ្សេង..."
+              class="w-20 px-2 py-1 text-xs rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-primary-500 font-bold shrink-0" />
           </div>
         </div>
 
         <!-- Search & Categories Bar -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
           <div class="relative flex-1">
-            <UIcon name="i-heroicons-magnifying-glass" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="ស្វែងរកម្ហូប (Search dish name)..."
-              class="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
-            />
+            <UIcon name="i-heroicons-magnifying-glass"
+              class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input v-model="searchQuery" type="text" placeholder="ស្វែងរកមុខម្ហូប..."
+              class="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500" />
           </div>
 
           <!-- Category Pills -->
           <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shrink-0 cursor-pointer"
-              :class="[
+            <button type="button"
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shrink-0 cursor-pointer" :class="[
                 selectedCategory === 'all'
                   ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700',
-              ]"
-              @click="selectedCategory = 'all'"
-            >
-              ទាំងអស់ (All)
+              ]" @click="selectedCategory = 'all'">
+              ទាំងអស់
             </button>
-            <button
-              v-for="cat in categoriesList"
-              :key="cat.id"
-              type="button"
-              class="px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shrink-0 cursor-pointer"
-              :class="[
+            <button v-for="cat in categoriesList" :key="cat.id" type="button"
+              class="px-3 py-1.5 text-xs font-semibold rounded-xl transition-all shrink-0 cursor-pointer" :class="[
                 selectedCategory === cat.id
                   ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-2xs'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700',
-              ]"
-              @click="selectedCategory = cat.id"
-            >
+              ]" @click="selectedCategory = cat.id">
               {{ cat.name }}
             </button>
           </div>
@@ -796,44 +807,37 @@ function handlePrint() {
 
       <!-- Menu Items Grid (Scrollable) -->
       <div class="flex-1 p-4 overflow-y-auto">
-        <div v-if="filteredItems.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-3">
-          <div
-            v-for="item in filteredItems"
-            :key="item.id"
+        <div v-if="filteredItems.length > 0"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div v-for="item in filteredItems" :key="item.id"
             class="group p-2.5 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-md cursor-pointer flex flex-col justify-between select-none"
-            @click="handleClickDish(item)"
-          >
+            @click="handleClickDish(item)">
             <!-- Dish Image -->
             <div class="relative w-full aspect-4/3 rounded-xl bg-gray-200 dark:bg-gray-700 overflow-hidden mb-2">
-              <img
-                v-if="item.imageUrl"
-                :src="item.imageUrl"
-                :alt="item.name"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
+              <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.name"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
               <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
                 <UIcon name="i-heroicons-photo" class="w-6 h-6" />
               </div>
 
               <!-- Multiple Prices Indicator Badge -->
-              <span
-                v-if="item.hasVariants"
-                class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-white backdrop-blur-md shadow-xs"
-              >
+              <span v-if="item.hasVariants"
+                class="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-white backdrop-blur-md shadow-xs">
                 {{ item.variants?.length ?? 0 }} ទំហំ
               </span>
             </div>
 
             <!-- Title & Price -->
             <div class="space-y-1">
-              <h3 class="text-xs font-bold text-gray-900 dark:text-white line-clamp-1 leading-snug group-hover:text-primary-600 dark:group-hover:text-primary-400">
+              <h3
+                class="text-xs font-bold text-gray-900 dark:text-white line-clamp-1 leading-snug group-hover:text-primary-600 dark:group-hover:text-primary-400">
                 {{ item.name }}
               </h3>
 
               <div class="flex items-baseline justify-between">
                 <span class="text-sm font-black text-primary-600 dark:text-primary-400">
                   <template v-if="item.hasVariants && item.variants && item.variants.length > 0">
-                    ${{ Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2) }}+
+                    ${{Math.min(...item.variants.map((v) => Number(v.price))).toFixed(2)}}+
                   </template>
                   <template v-else>
                     ${{ Number(item.price).toFixed(2) }}
@@ -856,29 +860,25 @@ function handlePrint() {
     </div>
 
     <!-- RIGHT SIDE: LIVE ORDER BILL / SLIP (35% width on desktop) -->
-    <div class="w-full lg:w-96 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden shrink-0">
+    <div
+      class="w-full lg:w-96 flex flex-col h-full bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xs overflow-hidden shrink-0">
       <!-- Order Header with Clear Active/New Mode Indicator and Action Buttons -->
-      <div
-        class="p-4 border-b transition-colors flex items-center justify-between shrink-0"
-        :class="[
-          !isCurrentTableOccupied
-            ? 'bg-emerald-500/10 border-emerald-200 dark:border-emerald-900/60'
-            : currentActiveOrder?.paymentStatus === 'billed'
+      <div class="p-4 border-b transition-colors flex items-center justify-between shrink-0" :class="[
+        !isCurrentTableOccupied
+          ? 'bg-emerald-500/10 border-emerald-200 dark:border-emerald-900/60'
+          : currentActiveOrder?.paymentStatus === 'billed'
             ? 'bg-purple-500/10 border-purple-200 dark:border-purple-900/60'
             : 'bg-amber-500/10 border-amber-200 dark:border-amber-900/60',
-        ]"
-      >
+      ]">
         <div class="flex items-center gap-2.5">
-          <div
-            class="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xs"
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xs"
             :class="[
               !isCurrentTableOccupied
                 ? 'bg-emerald-600'
                 : currentActiveOrder?.paymentStatus === 'billed'
-                ? 'bg-purple-600'
-                : 'bg-amber-500',
-            ]"
-          >
+                  ? 'bg-purple-600'
+                  : 'bg-amber-500',
+            ]">
             {{ currentSelectedTableName.replace('តុ ', 'T') }}
           </div>
 
@@ -887,30 +887,28 @@ function handlePrint() {
               <h2 class="text-sm font-extrabold text-gray-900 dark:text-white leading-tight">
                 {{ currentSelectedTableName }}
               </h2>
-              <span
-                class="px-2 py-0.5 rounded text-[10px] font-black uppercase"
-                :class="[
-                  !isCurrentTableOccupied
-                    ? 'bg-emerald-600 text-white'
-                    : currentActiveOrder?.paymentStatus === 'billed'
+              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase" :class="[
+                !isCurrentTableOccupied
+                  ? 'bg-emerald-600 text-white'
+                  : currentActiveOrder?.paymentStatus === 'billed'
                     ? 'bg-purple-600 text-white'
                     : 'bg-amber-500 text-white',
-                ]"
-              >
+              ]">
                 {{
                   !isCurrentTableOccupied
-                    ? 'New Order'
+                    ? 'តុទំនេរ'
                     : currentActiveOrder?.paymentStatus === 'billed'
-                    ? '🟣 សុំមើលបុង'
-                    : '🟡 កំពុងញ៉ាំ'
+                      ? '🟣 សុំមើលបុង'
+                      : '🟡 កំពុងញ៉ាំ'
                 }}
               </span>
             </div>
 
             <p class="text-[11px] text-gray-500 font-mono mt-0.5">
               <template v-if="isCurrentTableOccupied">
-                Order #{{ currentActiveOrder?.orderNumber }} • {{ cart.length }} items
-                <span v-if="currentActiveOrder?.paymentStatus === 'billed'" class="text-purple-600 dark:text-purple-400 font-bold ml-1">
+                កុម្ម៉ង់លេខ #{{ currentActiveOrder?.orderNumber }} • {{ cart.length }} មុខ
+                <span v-if="currentActiveOrder?.paymentStatus === 'billed'"
+                  class="text-purple-600 dark:text-purple-400 font-bold ml-1">
                   (រង់ចាំលុយ)
                 </span>
               </template>
@@ -923,140 +921,174 @@ function handlePrint() {
 
         <div class="flex items-center gap-1.5">
           <!-- Pre-Bill Button (Only when occupied and has items) -->
-          <button
-            v-if="isCurrentTableOccupied && cart.length > 0"
-            type="button"
+          <button v-if="isCurrentTableOccupied && cart.length > 0" type="button"
             :disabled="isPrintingPreBill || isSubmitting"
             class="px-2 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវមើល (Pre-Bill)"
-            @click="handlePrintPreBill"
-          >
+            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវមើល" @click="handlePrintPreBill">
             <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-document-text" class="w-3.5 h-3.5" />
-            <span>Pre-Bill</span>
+            <span>មើលបុង</span>
           </button>
 
           <!-- Split Bill Button (Only when occupied and has items) -->
-          <button
-            v-if="isCurrentTableOccupied && cart.length > 0"
-            type="button"
+          <button v-if="isCurrentTableOccupied && cart.length > 0" type="button"
             class="px-2 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
-            title="គិតលុយបំបែកមុខម្ហូប (Split Bill)"
-            @click="openSplitModal"
-          >
+            title="គិតលុយបំបែកមុខម្ហូប" @click="openSplitModal">
             <UIcon name="i-heroicons-scissors" class="w-3.5 h-3.5" />
-            <span>Split</span>
+            <span>បំបែកបុង</span>
           </button>
 
-          <button
-            type="button"
+          <button type="button"
             class="p-1.5 rounded-xl text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-            title="Clear order"
-            :disabled="cart.length === 0"
-            :class="{ 'opacity-30 cursor-not-allowed': cart.length === 0 }"
-            @click="clearCart"
-          >
+            title="សម្អាតបញ្ជីកុម្ម៉ង់" :disabled="cart.length === 0"
+            :class="{ 'opacity-30 cursor-not-allowed': cart.length === 0 }" @click="clearCart">
             <UIcon name="i-heroicons-trash" class="w-4 h-4" />
           </button>
         </div>
       </div>
 
       <!-- Order Items List (Scrollable) -->
-      <div class="flex-1 p-3 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-        <div v-if="cart.length > 0" class="space-y-2">
+      <div class="flex-1 p-3 overflow-y-auto space-y-2 bg-gray-50/50 dark:bg-gray-950/30">
+        <div v-if="cart.length > 0" class="space-y-2.5">
           <div
             v-for="(item, idx) in cart"
             :key="idx"
-            class="py-2.5 flex items-start justify-between gap-2"
+            class="p-3 rounded-2xl bg-white dark:bg-gray-800/90 border border-gray-200/90 dark:border-gray-700/80 hover:border-primary-400 dark:hover:border-primary-500/70 shadow-2xs hover:shadow-xs transition-all space-y-2.5 group"
           >
-            <!-- Left Info -->
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-bold text-gray-900 dark:text-white truncate">
-                {{ item.name }}
-              </p>
-              <div class="flex items-center gap-1.5 mt-0.5">
-                <span
-                  v-if="item.variantLabel"
-                  class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/50 dark:border-primary-800/50"
-                >
-                  {{ item.variantLabel }}
-                </span>
-                <span class="text-[11px] text-gray-400 font-mono">
-                  ${{ item.price.toFixed(2) }} ea
+            <!-- Top Row: Thumbnail + Item Info + Delete Button -->
+            <div class="flex items-start gap-2.5">
+              <!-- Dish Thumbnail Image or Fallback Badge -->
+              <div class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-700/80 overflow-hidden shrink-0 border border-gray-200/70 dark:border-gray-700 flex items-center justify-center relative shadow-2xs">
+                <img
+                  v-if="menuMap.get(item.menuItemId)?.imageUrl"
+                  :src="menuMap.get(item.menuItemId)?.imageUrl"
+                  :alt="item.name"
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div v-else class="w-full h-full flex items-center justify-center bg-linear-to-br from-primary-500/10 to-primary-600/20 text-primary-600 dark:text-primary-400 font-black text-xs">
+                  {{ item.name.slice(0, 2) }}
+                </div>
+                <!-- Index badge -->
+                <span class="absolute top-0.5 left-0.5 px-1 py-0.2 rounded-md bg-black/60 backdrop-blur-xs text-[8px] font-black text-white">
+                  #{{ idx + 1 }}
                 </span>
               </div>
 
-              <!-- Note input optional -->
-              <input
-                v-model="item.note"
-                type="text"
-                placeholder="ចំណាំ (Note: ស្ករតិច, មិនប៊ីចេង...)"
-                class="w-full mt-1.5 px-2 py-0.5 text-[10px] rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 focus:outline-hidden"
-              />
+              <!-- Item Details -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-1">
+                  <h4 class="text-xs font-black text-gray-900 dark:text-white truncate leading-tight group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                    {{ item.name }}
+                  </h4>
+                  <!-- Direct Remove Button -->
+                  <button
+                    type="button"
+                    class="p-1 -mr-1 -mt-1 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
+                    title="ដកមុខម្ហូបនេះចេញ"
+                    @click="handleRemoveItem(idx)"
+                  >
+                    <UIcon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <!-- Variant Badge & Unit Price -->
+                <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <span
+                    v-if="item.variantLabel"
+                    class="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400 border border-primary-200/60 dark:border-primary-800/60"
+                  >
+                    {{ item.variantLabel }}
+                  </span>
+                  <span class="text-[11px] font-bold text-gray-600 dark:text-gray-300 font-mono">
+                    ${{ item.price.toFixed(2) }}
+                  </span>
+                  <span class="text-[10px] text-gray-400 font-mono">
+                    (~{{ formatRiel(item.price) }}៛)
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <!-- Right: Quantity Stepper & Subtotal -->
-            <div class="flex flex-col items-end gap-1 shrink-0">
-              <span class="text-xs font-black text-gray-900 dark:text-white font-mono">
-                ${{ item.subtotal.toFixed(2) }}
-              </span>
-
-              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200/60 dark:border-gray-700/60">
+            <!-- Middle Row: Quantity Stepper & Subtotal -->
+            <div class="flex items-center justify-between pt-1.5 border-t border-dashed border-gray-100 dark:border-gray-700/60">
+              <!-- Stepper -->
+              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700/60 rounded-xl p-0.5 border border-gray-200/80 dark:border-gray-600/50">
                 <button
                   type="button"
-                  class="w-5 h-5 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition-colors cursor-pointer text-xs font-bold"
+                  class="w-6 h-6 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:shadow-2xs transition-all cursor-pointer text-xs font-bold active:scale-90"
+                  title="បន្ថយចំនួន"
                   @click="updateQuantity(idx, -1)"
                 >
                   -
                 </button>
-                <span class="w-5 text-center text-xs font-bold font-mono">
+                <span class="w-7 text-center text-xs font-black font-mono text-gray-900 dark:text-white">
                   {{ item.quantity }}
                 </span>
                 <button
                   type="button"
-                  class="w-5 h-5 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition-colors cursor-pointer text-xs font-bold"
+                  class="w-6 h-6 rounded-lg flex items-center justify-center bg-white dark:bg-gray-800 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-gray-700 shadow-2xs transition-all cursor-pointer text-xs font-bold active:scale-90"
+                  title="បន្ថែមចំនួន"
                   @click="updateQuantity(idx, 1)"
                 >
                   +
                 </button>
               </div>
+
+              <!-- Item Subtotal -->
+              <div class="text-right">
+                <span class="text-[10px] text-gray-400 mr-1 font-medium">សរុប:</span>
+                <span class="text-sm font-black text-primary-600 dark:text-primary-400 font-mono">
+                  ${{ item.subtotal.toFixed(2) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Bottom Row: Note Input -->
+            <div class="relative flex items-center">
+              <UIcon name="i-heroicons-pencil-square" class="w-3.5 h-3.5 text-gray-400 absolute left-2 pointer-events-none" />
+              <input
+                v-model="item.note"
+                type="text"
+                placeholder="ចំណាំបន្ថែម (ស្ករតិច, មិនប៊ីចេង, ខ្ចប់...)"
+                class="w-full pl-7 pr-2.5 py-1 text-[10px] rounded-lg bg-gray-50/90 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/70 focus:outline-hidden focus:border-primary-500 focus:bg-white dark:focus:bg-gray-900 transition-colors text-gray-700 dark:text-gray-300 placeholder:text-gray-400"
+              />
             </div>
           </div>
         </div>
 
-        <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 py-16 space-y-2">
-          <UIcon name="i-heroicons-shopping-bag" class="w-10 h-10 opacity-30" />
-          <p class="text-xs">មិនទាន់មានមុខម្ហូបក្នុង Order នេះទេ</p>
-          <span class="text-[11px] text-gray-400">ចុចលើមុខម្ហូបនៅខាងឆ្វេងដើម្បីកត់ត្រា</span>
+        <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 py-16 space-y-3">
+          <div class="w-16 h-16 rounded-3xl bg-white dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-700/60 flex items-center justify-center text-gray-400 dark:text-gray-500 shadow-2xs">
+            <UIcon name="i-heroicons-shopping-bag" class="w-8 h-8 opacity-60 text-primary-500" />
+          </div>
+          <div class="text-center space-y-1">
+            <p class="text-xs font-bold text-gray-700 dark:text-gray-300">មិនទាន់មានមុខម្ហូបក្នុងការកុម្ម៉ង់នេះទេ</p>
+            <span class="text-[11px] text-gray-400">ចុចលើមុខម្ហូបនៅខាងឆ្វេងដើម្បីកត់ត្រា</span>
+          </div>
         </div>
       </div>
 
       <!-- Order Calculations & Dual Action Buttons (Hold / Checkout) -->
-      <div class="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/60 space-y-3 shrink-0">
+      <div
+        class="p-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/60 space-y-3 shrink-0">
         <!-- Subtotal and Discount -->
         <div class="space-y-1.5 text-xs">
           <div class="flex justify-between text-gray-500">
-            <span>Subtotal (សរុបដើម):</span>
+            <span>សរុបដើម:</span>
             <span class="font-mono font-bold text-gray-700 dark:text-gray-300">${{ subtotal.toFixed(2) }}</span>
           </div>
 
           <div class="flex items-center justify-between text-gray-500">
-            <span>Discount (ចុះថ្លៃ $):</span>
+            <span>ចុះថ្លៃ ($):</span>
             <div class="w-20 relative">
               <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-              <input
-                v-model.number="discount"
-                type="number"
-                step="0.5"
-                min="0"
-                class="w-full pl-5 pr-1.5 py-0.5 text-xs text-right rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono font-bold"
-              />
+              <input v-model.number="discount" type="number" step="0.5" min="0"
+                class="w-full pl-5 pr-1.5 py-0.5 text-xs text-right rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-mono font-bold" />
             </div>
           </div>
 
           <!-- Total Highlight -->
           <div class="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-baseline justify-between">
-            <span class="text-sm font-black text-gray-900 dark:text-white">សរុប (Grand Total):</span>
+            <span class="text-sm font-black text-gray-900 dark:text-white">ទឹកប្រាក់សរុប:</span>
             <div class="text-right">
               <span class="text-xl font-black text-primary-600 dark:text-primary-400 font-mono">
                 ${{ totalAmount.toFixed(2) }}
@@ -1070,155 +1102,121 @@ function handlePrint() {
 
         <!-- Payment Method Selector -->
         <div class="grid grid-cols-3 gap-1.5 pt-1">
-          <button
-            type="button"
+          <button type="button"
             class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
             :class="[
               paymentMethod === 'cash'
                 ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]"
-            @click="paymentMethod = 'cash'"
-          >
+            ]" @click="paymentMethod = 'cash'">
             <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5" />
-            <span>Cash</span>
+            <span>សាច់ប្រាក់</span>
           </button>
 
-          <button
-            type="button"
+          <button type="button"
             class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
             :class="[
               paymentMethod === 'khqr'
                 ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]"
-            @click="paymentMethod = 'khqr'"
-          >
+            ]" @click="paymentMethod = 'khqr'">
             <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5" />
             <span>KHQR</span>
           </button>
 
-          <button
-            type="button"
+          <button type="button"
             class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
             :class="[
               paymentMethod === 'card'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]"
-            @click="paymentMethod = 'card'"
-          >
+            ]" @click="paymentMethod = 'card'">
             <UIcon name="i-heroicons-credit-card" class="w-3.5 h-3.5" />
-            <span>Card</span>
+            <span>កាត</span>
           </button>
         </div>
 
         <!-- ACTIONS: OCCUPIED (Save / Pre-Bill / Checkout) vs NEW (Hold / Checkout) -->
         <div v-if="isCurrentTableOccupied" class="grid grid-cols-3 gap-1.5 pt-1">
           <!-- Button 1: Save / Append Items -->
-          <button
-            type="button"
-            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+          <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
             class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="រក្សាទុកការបន្ថែមមុខម្ហូបទៅផ្ទះបាយ"
-            @click="handleSavePendingOrder"
-          >
+            title="រក្សាទុកការបន្ថែមមុខម្ហូបទៅផ្ទះបាយ" @click="handleSavePendingOrder">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-plus-circle" class="w-4 h-4" />
-            <span>ថែមម្ហូប (Save)</span>
+            <span>ថែមម្ហូប</span>
           </button>
 
           <!-- Button 2: Pre-Bill -->
-          <button
-            type="button"
-            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+          <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
             class="py-2.5 px-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white border border-purple-700 shadow-2xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវផ្ទៀងផ្ទាត់ (Pre-Bill)"
-            @click="handlePrintPreBill"
-          >
+            title="ចេញបុងបណ្ដោះអាសន្នឱ្យភ្ញៀវផ្ទៀងផ្ទាត់ (Pre-Bill)" @click="handlePrintPreBill">
             <UIcon v-if="isPrintingPreBill" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-document-text" class="w-4 h-4" />
-            <span>មើលបុង (Pre-Bill)</span>
+            <span>មើលបុង</span>
           </button>
 
           <!-- Button 3: Checkout -->
-          <button
-            type="button"
-            :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
+          <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
             class="py-2.5 px-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="គិតលុយគ្រប់ចំនួន និងបិទតុ"
-            @click="handleCheckout"
-          >
+            title="គិតលុយគ្រប់ចំនួន និងបិទតុ" @click="handleCheckout">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
-            <span>គិតលុយ (Pay)</span>
+            <span>គិតលុយ</span>
           </button>
         </div>
 
         <div v-else class="grid grid-cols-2 gap-2 pt-1">
           <!-- Button 1: Hold Table -->
-          <button
-            type="button"
-            :disabled="cart.length === 0 || isSubmitting"
+          <button type="button" :disabled="cart.length === 0 || isSubmitting"
             class="py-2.5 px-2 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600 shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="handleSavePendingOrder"
-          >
+            @click="handleSavePendingOrder">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-arrow-down-on-square" class="w-4 h-4 text-primary-500" />
-            <span>រក្សាទុកតុ (Hold)</span>
+            <span>រក្សាទុកតុ</span>
           </button>
 
           <!-- Button 2: Pay & Close Table -->
-          <button
-            type="button"
-            :disabled="cart.length === 0 || isSubmitting"
+          <button type="button" :disabled="cart.length === 0 || isSubmitting"
             class="py-2.5 px-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="handleCheckout"
-          >
+            @click="handleCheckout">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
-            <span>គិតលុយ (Checkout)</span>
+            <span>គិតលុយ</span>
           </button>
         </div>
       </div>
     </div>
 
     <!-- MODAL 1: VARIANT / SIZE SELECTION POPUP -->
-    <div
-      v-if="isVariantModalOpen && activeItemForVariant"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-    >
-      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+    <div v-if="isVariantModalOpen && activeItemForVariant"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div
+        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
         <div class="flex items-start justify-between">
           <div>
             <h3 class="font-extrabold text-base text-gray-900 dark:text-white">
               {{ activeItemForVariant.name }}
             </h3>
-            <p class="text-xs text-gray-500">សូមជ្រើសរើសទំហំ ឬជម្រើសលក់ (Select Size / Unit):</p>
+            <p class="text-xs text-gray-500">សូមជ្រើសរើសទំហំ ឬជម្រើសលក់:</p>
           </div>
-          <button
-            type="button"
-            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
-            @click="
+          <button type="button"
+            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer" @click="
               isVariantModalOpen = false;
-              activeItemForVariant = null;
-            "
-          >
+            activeItemForVariant = null;
+            ">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
         </div>
 
         <!-- Variant Options Grid -->
         <div class="space-y-2">
-          <button
-            v-for="(v, vIdx) in activeItemForVariant.variants"
-            :key="vIdx"
-            type="button"
+          <button v-for="(v, vIdx) in activeItemForVariant.variants" :key="vIdx" type="button"
             class="w-full p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:bg-primary-50/50 dark:hover:bg-primary-950/40 transition-all flex items-center justify-between group cursor-pointer text-left"
-            @click="selectVariantAndAdd(v.label, Number(v.price))"
-          >
+            @click="selectVariantAndAdd(v.label, Number(v.price))">
             <div>
-              <span class="text-sm font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
+              <span
+                class="text-sm font-bold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
                 {{ v.label }}
               </span>
               <span class="block text-[11px] text-gray-400 font-mono">
@@ -1235,47 +1233,43 @@ function handlePrint() {
     </div>
 
     <!-- MODAL 2: RECEIPT POPUP / PRINT VIEW -->
-    <div
-      v-if="isReceiptModalOpen && lastSavedOrder"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-    >
-      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+    <div v-if="isReceiptModalOpen && lastSavedOrder"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div
+        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
         <!-- Receipt Content -->
         <div id="receipt-print-area" class="space-y-4 text-center">
           <div>
-            <h2 class="text-lg font-black text-gray-900 dark:text-white">RESTAURANT MENU</h2>
+            <h2 class="text-lg font-black text-gray-900 dark:text-white">វិក្កយបត្រភោជនីយដ្ឋាន</h2>
 
             <!-- Pre-Bill vs Official Header Badge -->
             <div class="mt-2">
-              <div
-                v-if="receiptMode === 'pre_bill'"
-                class="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 space-y-0.5"
-              >
+              <div v-if="receiptMode === 'pre_bill'"
+                class="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 space-y-0.5">
                 <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
-                  <UIcon name="i-heroicons-document-magnifying-glass" class="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span>វិក្កយបត្របណ្តោះអាសន្ន / PRE-BILL</span>
+                  <UIcon name="i-heroicons-document-magnifying-glass"
+                    class="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span>វិក្កយបត្របណ្តោះអាសន្ន</span>
                 </div>
                 <p class="text-[10px] text-purple-600 dark:text-purple-300 font-semibold">
                   (មិនទាន់ទូទាត់ប្រាក់ • សម្រាប់ភ្ញៀវផ្ទៀងផ្ទាត់)
                 </p>
               </div>
 
-              <div
-                v-else
-                class="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-0.5"
-              >
+              <div v-else
+                class="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-0.5">
                 <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
                   <UIcon name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>វិក្កយបត្រផ្លូវការ / OFFICIAL RECEIPT</span>
+                  <span>វិក្កយបត្រផ្លូវការ</span>
                 </div>
                 <p class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">
-                  (បានទូទាត់ប្រាក់រួចរាល់ • PAID)
+                  (បានទូទាត់ប្រាក់រួចរាល់)
                 </p>
               </div>
             </div>
 
             <p class="text-[11px] text-gray-400 font-mono mt-2">
-              Order #{{ lastSavedOrder.orderNumber }} • {{ lastSavedOrder.tableNumber }}
+              លេខកុម្ម៉ង់ #{{ lastSavedOrder.orderNumber }} • {{ lastSavedOrder.tableNumber }}
             </p>
             <p class="text-[10px] text-gray-400 font-mono">
               {{ new Date(lastSavedOrder.createdAt || Date.now()).toLocaleString() }}
@@ -1283,11 +1277,8 @@ function handlePrint() {
           </div>
 
           <div class="border-t border-b border-dashed border-gray-300 dark:border-gray-700 py-3 space-y-2 text-left">
-            <div
-              v-for="(it, itIdx) in lastSavedOrder.items"
-              :key="itIdx"
-              class="flex items-start justify-between text-xs"
-            >
+            <div v-for="(it, itIdx) in lastSavedOrder.items" :key="itIdx"
+              class="flex items-start justify-between text-xs">
               <div class="flex-1">
                 <p class="font-bold text-gray-900 dark:text-white">{{ it.name }}</p>
                 <p v-if="it.variantLabel" class="text-[10px] text-gray-500 font-mono">
@@ -1303,25 +1294,28 @@ function handlePrint() {
           <!-- Total Calculation -->
           <div class="space-y-1 text-xs">
             <div class="flex justify-between text-gray-500">
-              <span>Subtotal:</span>
+              <span>សរុបដើម:</span>
               <span class="font-mono font-bold">${{ lastSavedOrder.subtotal.toFixed(2) }}</span>
             </div>
             <div v-if="lastSavedOrder.discount" class="flex justify-between text-gray-500">
-              <span>Discount:</span>
+              <span>ចុះថ្លៃ:</span>
               <span class="font-mono font-bold">-${{ lastSavedOrder.discount.toFixed(2) }}</span>
             </div>
-            <div class="flex justify-between text-sm font-black text-gray-900 dark:text-white pt-1 border-t border-gray-200 dark:border-gray-700">
-              <span>TOTAL (USD):</span>
-              <span class="font-mono text-primary-600 dark:text-primary-400">${{ lastSavedOrder.totalAmount.toFixed(2) }}</span>
+            <div
+              class="flex justify-between text-sm font-black text-gray-900 dark:text-white pt-1 border-t border-gray-200 dark:border-gray-700">
+              <span>សរុប (ដុល្លារ):</span>
+              <span class="font-mono text-primary-600 dark:text-primary-400">${{ lastSavedOrder.totalAmount.toFixed(2)
+              }}</span>
             </div>
             <div class="flex justify-between text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              <span>TOTAL (KHR):</span>
+              <span>សរុប (រៀល):</span>
               <span class="font-mono">≈ {{ formatRiel(lastSavedOrder.totalAmount) }} ៛</span>
             </div>
           </div>
 
           <!-- Footer Notice for Pre-bill vs Official -->
-          <div v-if="receiptMode === 'pre_bill'" class="pt-2 text-center text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+          <div v-if="receiptMode === 'pre_bill'"
+            class="pt-2 text-center text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
             <p class="font-bold text-purple-700 dark:text-purple-400">
               * សូមពិនិត្យមើលមុខម្ហូប និងចំនួនទឹកប្រាក់
             </p>
@@ -1329,78 +1323,66 @@ function handlePrint() {
           </div>
 
           <div v-else class="pt-2 text-center text-[11px] text-gray-400">
-            <p>Payment: {{ lastSavedOrder.paymentMethod.toUpperCase() }}</p>
-            <p class="mt-1 font-bold text-emerald-600 dark:text-emerald-400">សូមអរគុណ! Thank You!</p>
+            <p>ការទូទាត់៖ {{ lastSavedOrder.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (lastSavedOrder.paymentMethod ===
+              'khqr' ? 'KHQR' : 'កាត') }}</p>
+            <p class="mt-1 font-bold text-emerald-600 dark:text-emerald-400">សូមអរគុណ និងសូមអញ្ជើញមកពិសាម្តងទៀត!</p>
           </div>
         </div>
 
         <!-- Action Buttons -->
         <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 cursor-pointer"
             @click="
               isReceiptModalOpen = false;
-              lastSavedOrder = null;
-            "
-          >
-            Close (បិទ)
+            lastSavedOrder = null;
+            ">
+            បិទ
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="flex-1 py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1 shadow-sm cursor-pointer"
             :class="receiptMode === 'pre_bill' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-primary-600 hover:bg-primary-500'"
-            @click="handlePrint"
-          >
+            @click="handlePrint">
             <UIcon name="i-heroicons-printer" class="w-4 h-4" />
-            <span>{{ receiptMode === 'pre_bill' ? 'ព្រីនបុងមើល' : 'Print Slip' }}</span>
+            <span>{{ receiptMode === 'pre_bill' ? 'ព្រីនបុងមើល' : 'ព្រីនវិក្កយបត្រ' }}</span>
           </button>
         </div>
       </div>
     </div>
 
     <!-- MODAL 3: SPLIT BILL POPUP (ផ្ទាំងគិតលុយបំបែកមុខម្ហូប) -->
-    <div
-      v-if="isSplitModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
-    >
-      <div class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[90vh] flex flex-col overflow-hidden">
+    <div v-if="isSplitModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div
+        class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[90vh] flex flex-col overflow-hidden">
         <!-- Header -->
         <div class="flex items-start justify-between pb-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
           <div>
             <h3 class="font-extrabold text-base text-gray-900 dark:text-white flex items-center gap-1.5">
               <UIcon name="i-heroicons-scissors" class="w-5 h-5 text-amber-500" />
-              <span>គិតលុយបំបែក (Split Bill) - {{ currentSelectedTableName }}</span>
+              <span>គិតលុយបំបែក - {{ currentSelectedTableName }}</span>
             </h3>
             <p class="text-xs text-gray-500 mt-0.5">
               ជ្រើសរើសមុខម្ហូប និងចំនួនដែលមិត្តភក្តិគាត់សុំគិតលុយមុន
             </p>
           </div>
-          <button
-            type="button"
+          <button type="button"
             class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
-            @click="isSplitModalOpen = false"
-          >
+            @click="isSplitModalOpen = false">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
         </div>
 
         <!-- Items with Stepper to Pay Now (Scrollable) -->
         <div class="flex-1 overflow-y-auto space-y-2.5 pr-1 divide-y divide-gray-100 dark:divide-gray-800">
-          <div
-            v-for="(it, itIdx) in splitItems"
-            :key="itIdx"
-            class="pt-2 flex items-center justify-between gap-3"
-          >
+          <div v-for="(it, itIdx) in splitItems" :key="itIdx" class="pt-2 flex items-center justify-between gap-3">
             <div class="min-w-0 flex-1">
               <p class="text-xs font-bold text-gray-900 dark:text-white truncate">
                 {{ it.name }}
               </p>
               <div class="flex items-center gap-1.5 mt-0.5">
-                <span
-                  v-if="it.variantLabel"
-                  class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                >
+                <span v-if="it.variantLabel"
+                  class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                   {{ it.variantLabel }}
                 </span>
                 <span class="text-[11px] text-gray-400 font-mono">
@@ -1411,25 +1393,20 @@ function handlePrint() {
 
             <!-- Qty to pay stepper -->
             <div class="flex items-center gap-2 shrink-0">
-              <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200 dark:border-gray-700">
-                <button
-                  type="button"
+              <div
+                class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200 dark:border-gray-700">
+                <button type="button"
                   class="w-6 h-6 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 font-bold text-xs cursor-pointer"
-                  @click="updateSplitQty(itIdx, -1)"
-                >
+                  @click="updateSplitQty(itIdx, -1)">
                   -
                 </button>
-                <span
-                  class="w-6 text-center text-xs font-black font-mono"
-                  :class="it.qtyToPay > 0 ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'"
-                >
+                <span class="w-6 text-center text-xs font-black font-mono"
+                  :class="it.qtyToPay > 0 ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'">
                   {{ it.qtyToPay }}
                 </span>
-                <button
-                  type="button"
+                <button type="button"
                   class="w-6 h-6 rounded flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 font-bold text-xs cursor-pointer"
-                  @click="updateSplitQty(itIdx, 1)"
-                >
+                  @click="updateSplitQty(itIdx, 1)">
                   +
                 </button>
               </div>
@@ -1443,10 +1420,11 @@ function handlePrint() {
         </div>
 
         <!-- Total Calculation for Split Items -->
-        <div class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-3 shrink-0 bg-gray-50/70 dark:bg-gray-800/40 p-3 rounded-2xl">
+        <div
+          class="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-3 shrink-0 bg-gray-50/70 dark:bg-gray-800/40 p-3 rounded-2xl">
           <div class="flex items-baseline justify-between text-xs">
             <span class="font-bold text-gray-700 dark:text-gray-300">
-              សរុបមុខម្ហូបដែលគិតមុន ({{ splitSelectedCount }} items):
+              សរុបមុខម្ហូបដែលគិតមុន ({{ splitSelectedCount }} មុខ):
             </span>
             <div class="text-right">
               <span class="text-lg font-black text-amber-600 dark:text-amber-400 font-mono">
@@ -1460,42 +1438,33 @@ function handlePrint() {
 
           <!-- Payment Method Toggle -->
           <div class="grid grid-cols-3 gap-1.5">
-            <button
-              type="button"
+            <button type="button"
               class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
               :class="splitPaymentMethod === 'cash' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
-              @click="splitPaymentMethod = 'cash'"
-            >
+              @click="splitPaymentMethod = 'cash'">
               <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5" />
-              <span>Cash</span>
+              <span>សាច់ប្រាក់</span>
             </button>
-            <button
-              type="button"
+            <button type="button"
               class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
               :class="splitPaymentMethod === 'khqr' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
-              @click="splitPaymentMethod = 'khqr'"
-            >
+              @click="splitPaymentMethod = 'khqr'">
               <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5" />
               <span>KHQR</span>
             </button>
-            <button
-              type="button"
+            <button type="button"
               class="py-1 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 border transition-all cursor-pointer"
               :class="splitPaymentMethod === 'card' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
-              @click="splitPaymentMethod = 'card'"
-            >
+              @click="splitPaymentMethod = 'card'">
               <UIcon name="i-heroicons-credit-card" class="w-3.5 h-3.5" />
-              <span>Card</span>
+              <span>កាត</span>
             </button>
           </div>
 
           <!-- Confirm Button -->
-          <button
-            type="button"
-            :disabled="splitSelectedCount === 0 || isSubmittingSplit"
+          <button type="button" :disabled="splitSelectedCount === 0 || isSubmittingSplit"
             class="w-full py-2.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="handleConfirmSplitPay"
-          >
+            @click="handleConfirmSplitPay">
             <UIcon v-if="isSubmittingSplit" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
             <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
             <span>គិតលុយមុខម្ហូបទាំងនេះ (${{ splitTotalUSD.toFixed(2) }}) & ចេញវិក្កយបត្រ</span>
@@ -1505,21 +1474,17 @@ function handlePrint() {
     </div>
 
     <!-- MODAL 4: CONFIRMATION POPUP (សម្រាប់បញ្ជាក់ការដក ឬបន្ថែម ជៀសវាងការច្រលំដៃ) -->
-    <div
-      v-if="confirmDialog.isOpen"
+    <div v-if="confirmDialog.isOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-      @click.self="handleConfirmDialogAction(false)"
-    >
-      <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
+      @click.self="handleConfirmDialogAction(false)">
+      <div
+        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
         <div class="flex items-start gap-3">
-          <div
-            class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5"
-            :class="confirmDialog.type === 'remove' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'"
-          >
+          <div class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5"
+            :class="confirmDialog.type === 'remove' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'">
             <UIcon
               :name="confirmDialog.type === 'remove' ? 'i-heroicons-trash' : (confirmDialog.type === 'add' ? 'i-heroicons-plus-circle' : 'i-heroicons-arrow-down-on-square')"
-              class="w-6 h-6"
-            />
+              class="w-6 h-6" />
           </div>
           <div class="flex-1 min-w-0">
             <h3 class="font-extrabold text-base text-gray-900 dark:text-white leading-snug">
@@ -1532,10 +1497,8 @@ function handlePrint() {
         </div>
 
         <!-- Details Box -->
-        <div
-          v-if="confirmDialog.details"
-          class="p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 text-xs space-y-1"
-        >
+        <div v-if="confirmDialog.details"
+          class="p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 text-xs space-y-1">
           <p class="font-bold text-gray-900 dark:text-white truncate">
             {{ confirmDialog.details.name }}
           </p>
@@ -1546,19 +1509,15 @@ function handlePrint() {
 
         <!-- Action Buttons -->
         <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <button
-            type="button"
+          <button type="button"
             class="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-            @click="handleConfirmDialogAction(false)"
-          >
-            បោះបង់ (Cancel)
+            @click="handleConfirmDialogAction(false)">
+            បោះបង់
           </button>
-          <button
-            type="button"
+          <button type="button"
             class="px-4 py-2 rounded-xl text-xs font-black text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
             :class="confirmDialog.type === 'remove' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-amber-500 hover:bg-amber-600'"
-            @click="handleConfirmDialogAction(true)"
-          >
+            @click="handleConfirmDialogAction(true)">
             <span>{{ confirmDialog.confirmText || 'យល់ព្រម' }}</span>
           </button>
         </div>

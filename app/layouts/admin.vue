@@ -5,13 +5,13 @@ const route = useRoute();
 const isMobileMenuOpen = ref(false);
 
 const adminNav = [
-  { label: 'Overview', icon: 'i-heroicons-chart-pie', to: '/admin' },
-  { label: 'Cashier POS (កត់ត្រា)', icon: 'i-heroicons-calculator', to: '/admin/pos' },
-  { label: 'Menu & Dishes', icon: 'i-heroicons-book-open', to: '/admin/menu' },
-  { label: 'Daily Reports (របាយការណ៍)', icon: 'i-heroicons-chart-bar-square', to: '/admin/reports' },
-  { label: 'Users & Roles', icon: 'i-heroicons-users', to: '/admin/users' },
-  { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/logs' },
-  { label: 'Settings', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/settings' },
+  { label: 'ផ្ទាំងទូទៅ', icon: 'i-heroicons-chart-pie', to: '/admin' },
+  { label: 'កន្លែងគិតលុយ (POS)', icon: 'i-heroicons-calculator', to: '/admin/pos' },
+  { label: 'មុខម្ហូប និងភេសជ្ជៈ', icon: 'i-heroicons-book-open', to: '/admin/menu' },
+  { label: 'របាយការណ៍ប្រចាំថ្ងៃ', icon: 'i-heroicons-chart-bar-square', to: '/admin/reports' },
+  { label: 'អ្នកប្រើប្រាស់', icon: 'i-heroicons-users', to: '/admin/users' },
+  { label: 'កំណត់ត្រាប្រព័ន្ធ', icon: 'i-heroicons-document-text', to: '/admin/logs' },
+  { label: 'ការកំណត់', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/settings' },
 ];
 
 // Close mobile drawer on route navigation
@@ -34,10 +34,8 @@ watch(() => route.path, () => {
             <UIcon name="i-heroicons-shield-check" class="w-6 h-6" />
           </div>
           <div>
-            <span class="font-extrabold text-base tracking-tight text-gray-900 dark:text-white block leading-none">Admin
-              Control</span>
-            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono tracking-wider">CLOUDFLARE D1
-              PLATFORM</span>
+            <span class="font-extrabold text-base tracking-tight text-gray-900 dark:text-white block leading-none">ផ្ទាំងគ្រប់គ្រង</span>
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono tracking-wider">ប្រព័ន្ធគ្រប់គ្រងភោជនីយដ្ឋាន</span>
           </div>
         </NuxtLink>
 
@@ -57,14 +55,14 @@ watch(() => route.path, () => {
 
         <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <NuxtLink to="/" class="hover:underline text-gray-600 dark:text-gray-400 flex items-center gap-1 font-medium">
-            <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" /> Back to Home
+            <UIcon name="i-heroicons-arrow-left" class="w-3.5 h-3.5" /> ត្រឡប់ទៅទំព័រដើម
           </NuxtLink>
           <UColorModeButton />
         </div>
 
         <UButton color="error" variant="soft" size="xs" block icon="i-heroicons-arrow-right-on-rectangle"
           @click="logout" class="w-full font-medium">
-          Logout Admin
+          ចាកចេញ
         </UButton>
       </div>
     </aside>
@@ -81,7 +79,7 @@ watch(() => route.path, () => {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <UIcon name="i-heroicons-shield-check" class="w-6 h-6 text-primary-500" />
-              <span class="font-extrabold text-base tracking-tight">Admin Control</span>
+              <span class="font-extrabold text-base tracking-tight">ផ្ទាំងគ្រប់គ្រង</span>
             </div>
             <UButton icon="i-heroicons-x-mark" color="neutral" variant="ghost" size="xs"
               @click="isMobileMenuOpen = false" />
@@ -98,10 +96,10 @@ watch(() => route.path, () => {
         </div>
 
         <div class="border-t border-gray-200 dark:border-gray-800 pt-4 space-y-3">
-          <NuxtLink to="/" class="block text-xs text-gray-500 hover:underline">← Exit to Main App</NuxtLink>
+          <NuxtLink to="/" class="block text-xs text-gray-500 hover:underline">← ត្រឡប់ទៅទំព័រដើម</NuxtLink>
           <UButton color="error" variant="soft" size="sm" block icon="i-heroicons-arrow-right-on-rectangle"
             @click="logout">
-            Logout
+            ចាកចេញ
           </UButton>
         </div>
       </div>

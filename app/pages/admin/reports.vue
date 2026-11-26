@@ -76,7 +76,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
             :class="selectedDate === todayStr ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
             @click="setDatePreset('today')"
           >
-            ថ្ងៃនេះ (Today)
+            ថ្ងៃនេះ
           </button>
           <input
             v-model="selectedDate"
@@ -91,7 +91,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
           @click="handlePrint"
         >
           <UIcon name="i-heroicons-printer" class="w-4 h-4" />
-          <span>Print Slip (ព្រីនរបាយការណ៍)</span>
+          <span>ព្រីនរបាយការណ៍</span>
         </button>
       </div>
     </div>
@@ -103,7 +103,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
         <!-- 1. Total USD -->
         <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
           <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">Total Revenue (USD)</span>
+            <span class="text-xs font-semibold">ចំណូលសរុប (USD)</span>
             <div class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
               <UIcon name="i-heroicons-currency-dollar" class="w-5 h-5" />
             </div>
@@ -119,7 +119,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
         <!-- 2. Total KHR -->
         <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
           <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">Total Revenue (KHR)</span>
+            <span class="text-xs font-semibold">ចំណូលសរុប (រៀល)</span>
             <div class="p-1.5 rounded-lg bg-primary-50 dark:bg-primary-950/50 text-primary-600">
               <UIcon name="i-heroicons-banknotes" class="w-5 h-5" />
             </div>
@@ -169,7 +169,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
       <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-3">
         <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
           <UIcon name="i-heroicons-credit-card" class="w-4 h-4 text-primary-500" />
-          <span>ការទូទាត់តាមប្រភេទ (Payment Methods Breakdown)</span>
+          <span>ការទូទាត់តាមប្រភេទ</span>
         </h2>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -179,7 +179,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
                 💵
               </div>
               <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">Cash (សាច់ប្រាក់)</p>
+                <p class="text-xs font-bold text-gray-900 dark:text-white">សាច់ប្រាក់</p>
                 <p class="text-[10px] text-gray-400">ប្រាក់ដុល្លារ & រៀល</p>
               </div>
             </div>
@@ -194,7 +194,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
                 📱
               </div>
               <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">KHQR (ស្កេន QR)</p>
+                <p class="text-xs font-bold text-gray-900 dark:text-white">KHQR</p>
                 <p class="text-[10px] text-gray-400">Bakong / ABA / Acleda</p>
               </div>
             </div>
@@ -209,7 +209,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
                 💳
               </div>
               <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">Card (កាតធនាគារ)</p>
+                <p class="text-xs font-bold text-gray-900 dark:text-white">កាតធនាគារ</p>
                 <p class="text-[10px] text-gray-400">Visa / Mastercard</p>
               </div>
             </div>
@@ -227,7 +227,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
           <div>
             <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <UIcon name="i-heroicons-fire" class="w-4 h-4 text-amber-500" />
-              <span>មុខម្ហូបលក់ដាច់បំផុត (Top 10 Selling)</span>
+              <span>មុខម្ហូបលក់ដាច់បំផុតទាំង ១០</span>
             </h2>
             <p class="text-xs text-gray-500">តម្រៀបតាមចំនួនចាន/កំប៉ុងដែលបានលក់</p>
           </div>
@@ -283,12 +283,12 @@ function setDatePreset(type: 'today' | 'yesterday') {
             <div>
               <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <UIcon name="i-heroicons-document-text" class="w-4 h-4 text-primary-500" />
-                <span>បញ្ជីវិក្កយបត្រលម្អិត (Daily Order Invoices)</span>
+                <span>បញ្ជីវិក្កយបត្រលម្អិត</span>
               </h2>
               <p class="text-xs text-gray-500">រាល់ Order ទាំងអស់ដែល Cashier បានកត់ត្រា</p>
             </div>
             <span class="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-              {{ report.orders.length }} orders
+              {{ report.orders.length }} វិក្កយបត្រ
             </span>
           </div>
 
@@ -296,12 +296,12 @@ function setDatePreset(type: 'today' | 'yesterday') {
             <table class="w-full text-left text-xs">
               <thead class="border-b border-gray-200 dark:border-gray-800 text-gray-500 font-medium">
                 <tr>
-                  <th class="py-2 px-3">Order #</th>
-                  <th class="py-2 px-3">តុ (Table)</th>
-                  <th class="py-2 px-3">មុខម្ហូប (Items)</th>
-                  <th class="py-2 px-3">ទូទាត់ (Method)</th>
-                  <th class="py-2 px-3">ស្ថានភាព (Status)</th>
-                  <th class="py-2 px-3 text-right">សរុប (Total)</th>
+                  <th class="py-2 px-3">លេខកុម្ម៉ង់</th>
+                  <th class="py-2 px-3">តុ</th>
+                  <th class="py-2 px-3">មុខម្ហូប</th>
+                  <th class="py-2 px-3">វិធីទូទាត់</th>
+                  <th class="py-2 px-3">ស្ថានភាព</th>
+                  <th class="py-2 px-3 text-right">សរុប</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -330,12 +330,12 @@ function setDatePreset(type: 'today' | 'yesterday') {
                           : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600',
                       ]"
                     >
-                      {{ ord.paymentMethod }}
+                      {{ ord.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (ord.paymentMethod === 'khqr' ? 'KHQR' : 'កាត') }}
                     </span>
                   </td>
                   <td class="py-2.5 px-3">
                     <span
-                      class="px-2 py-0.5 rounded text-[10px] font-bold font-mono inline-flex items-center gap-1"
+                      class="px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1"
                       :class="[
                         ord.paymentStatus === 'paid'
                           ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50'
@@ -354,7 +354,7 @@ function setDatePreset(type: 'today' | 'yesterday') {
                             : 'bg-amber-500',
                         ]"
                       ></span>
-                      {{ ord.paymentStatus === 'paid' ? 'PAID' : ord.paymentStatus === 'billed' ? 'BILLED' : 'PENDING' }}
+                      {{ ord.paymentStatus === 'paid' ? 'បានបង់' : ord.paymentStatus === 'billed' ? 'សុំមើលបុង' : 'កំពុងញ៉ាំ' }}
                     </span>
                   </td>
                   <td class="py-2.5 px-3 text-right">
