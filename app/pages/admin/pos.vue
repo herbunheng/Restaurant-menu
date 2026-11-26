@@ -78,11 +78,13 @@ const menuMap = computed(() => {
   return map;
 });
 
-// Active Tables Dictionary: tableNumber -> Order
+// Active Tables Dictionary: tableNumber -> Order (Order ថ្មីបំផុត)
 const activeTablesMap = computed(() => {
   const map = new Map<string, Order>();
   for (const o of activeOrders.value) {
-    map.set(o.tableNumber, o);
+    if (!map.has(o.tableNumber)) {
+      map.set(o.tableNumber, o);
+    }
   }
   return map;
 });
@@ -434,57 +436,6 @@ const splitItems = ref<{
 const splitPaymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
 const isSubmittingSplit = ref(false);
 
-// Confirmation Dialog State (ជៀសវាងការច្រលំដៃពេល ដក រឺ បន្ថែមមុខម្ហូប)
-interface ConfirmDialogState {
-  isOpen: boolean;
-  type: 'add' | 'remove' | 'hold';
-  title: string;
-  message: string;
-  confirmText?: string;
-  details?: {
-    name: string;
-    subtext?: string;
-  };
-  onConfirm: () => void;
-}
-
-const confirmDialog = ref<ConfirmDialogState>({
-  isOpen: false,
-  type: 'hold',
-  title: '',
-  message: '',
-  confirmText: 'យល់ព្រម',
-  onConfirm: () => { },
-});
-
-function openConfirmDialog(options: {
-  type: 'add' | 'remove' | 'hold';
-  title: string;
-  message: string;
-  confirmText?: string;
-  details?: {
-    name: string;
-    subtext?: string;
-  };
-  onConfirm: () => void;
-}) {
-  confirmDialog.value = {
-    isOpen: true,
-    type: options.type,
-    title: options.title,
-    message: options.message,
-    confirmText: options.confirmText || 'យល់ព្រម',
-    details: options.details,
-    onConfirm: options.onConfirm,
-  };
-}
-
-function handleConfirmDialogAction(confirmed: boolean) {
-  if (confirmed && confirmDialog.value.onConfirm) {
-    confirmDialog.value.onConfirm();
-  }
-  confirmDialog.value.isOpen = false;
-}
 
 function openSplitModal() {
   if (!isCurrentTableOccupied.value || cart.value.length === 0) return;
@@ -624,26 +575,6 @@ function selectVariantAndAdd(label: string, price: number) {
 }
 
 function addItemToCart(menuItemId: string, name: string, variantLabel: string, price: number) {
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    // តុដែលបានរក្សាទុក (Hold / តុជាប់) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
-    openConfirmDialog({
-      type: 'add',
-      title: 'បញ្ជាក់ការបន្ថែមមុខម្ហូប',
-      message: `តើអ្នកពិតជាចង់បន្ថែមមុខម្ហូប "${name}" ចូលក្នុង ${table} មែនទេ?`,
-      confirmText: 'យល់ព្រមបន្ថែម',
-      details: {
-        name: name + (variantLabel ? ` (${variantLabel})` : ''),
-        subtext: `តម្លៃ៖ $${price.toFixed(2)} • តុ៖ ${table}`,
-      },
-      onConfirm: () => {
-        executeAddItemToCart(menuItemId, name, variantLabel, price);
-      },
-    });
-    return;
-  }
-
   executeAddItemToCart(menuItemId, name, variantLabel, price);
 }
 
@@ -669,51 +600,6 @@ function executeAddItemToCart(menuItemId: string, name: string, variantLabel: st
 }
 
 function updateQuantity(index: number, delta: number) {
-  const item = cart.value[index];
-  if (!item) return;
-
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    // ករណីតុដែលបានរក្សាទុក (Hold) ត្រូវសួរបញ្ជាក់សិនដើម្បីជៀសវាងច្រលំដៃ
-    if (delta < 0) {
-      // ករណីដក / បន្ថយ
-      const isWillDelete = item.quantity + delta <= 0;
-      openConfirmDialog({
-        type: 'remove',
-        title: isWillDelete ? 'បញ្ជាក់ការដកមុខម្ហូបចេញ' : 'បញ្ជាក់ការបន្ថយចំនួន',
-        message: isWillDelete
-          ? `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`
-          : `តើអ្នកពិតជាចង់បន្ថយចំនួន "${item.name}" ពី ${item.quantity} មកនៅត្រឹម ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
-        confirmText: isWillDelete ? 'យល់ព្រមដកចេញ' : 'យល់ព្រមបន្ថយ',
-        details: {
-          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-          subtext: `តុ៖ ${table} • បរិមាណបច្ចុប្បន្ន៖ ${item.quantity}`,
-        },
-        onConfirm: () => {
-          executeQuantityChange(index, delta);
-        },
-      });
-      return;
-    } else if (delta > 0) {
-      // ករណីបន្ថែមចំនួន
-      openConfirmDialog({
-        type: 'add',
-        title: 'បញ្ជាក់ការបន្ថែមចំនួន',
-        message: `តើអ្នកពិតជាចង់បន្ថែមចំនួន "${item.name}" ពី ${item.quantity} ទៅ ${item.quantity + delta} សម្រាប់ ${table} មែនទេ?`,
-        confirmText: 'យល់ព្រមបន្ថែម',
-        details: {
-          name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-          subtext: `តុ៖ ${table} • បរិមាណថ្មី៖ ${item.quantity + delta}`,
-        },
-        onConfirm: () => {
-          executeQuantityChange(index, delta);
-        },
-      });
-      return;
-    }
-  }
-
   executeQuantityChange(index, delta);
 }
 
@@ -730,55 +616,17 @@ function executeQuantityChange(index: number, delta: number) {
 }
 
 function handleRemoveItem(index: number) {
-  const item = cart.value[index];
-  if (!item) return;
-
-  const table = currentSelectedTableName.value;
-
-  if (isCurrentTableOccupied.value) {
-    openConfirmDialog({
-      type: 'remove',
-      title: 'បញ្ជាក់ការដកមុខម្ហូបចេញ',
-      message: `តើអ្នកពិតជាចង់ដកមុខម្ហូប "${item.name}" ចេញពី ${table} មែនទេ?`,
-      confirmText: 'យល់ព្រមដកចេញ',
-      details: {
-        name: item.name + (item.variantLabel ? ` (${item.variantLabel})` : ''),
-        subtext: `តុ៖ ${table} • បរិមាណ៖ ${item.quantity}`,
-      },
-      onConfirm: () => {
-        cart.value.splice(index, 1);
-      },
-    });
-    return;
-  }
-
   cart.value.splice(index, 1);
 }
 
 function clearCart() {
   if (cart.value.length === 0) return;
-
-  const table = currentSelectedTableName.value;
-  openConfirmDialog({
-    type: 'remove',
-    title: 'សម្អាតបញ្ជីកុម្ម៉ង់',
-    message: isCurrentTableOccupied.value
-      ? `តើអ្នកពិតជាចង់លុបសម្អាតមុខម្ហូបទាំងអស់ចេញពីកន្ត្រកនៃ ${table} មែនទេ?`
-      : 'តើអ្នកពិតជាចង់សម្អាតមុខម្ហូបទាំងអស់ក្នុងកន្ត្រកនេះមែនទេ?',
-    confirmText: 'យល់ព្រមសម្អាត',
-    details: {
-      name: `${cart.value.length} មុខម្ហូបសរុប`,
-      subtext: `តម្លៃសរុប៖ $${subtotal.value.toFixed(2)} • តុ៖ ${table}`,
-    },
-    onConfirm: () => {
-      cart.value = [];
-      discount.value = 0;
-      orderNote.value = '';
-    },
-  });
+  cart.value = [];
+  discount.value = 0;
+  orderNote.value = '';
 }
 
-// 1. ACTION: HOLD / APPEND ORDER (ទុកតុ / Order បន្ថែម - មិនទាន់គិតលុយ)
+// 1. ACTION: HOLD / APPEND ORDER (ទុកតុ / Order បន្ថែម - រក្សាទុកភ្លាមៗដោយគ្មានផ្ទាំងរំខាន)
 async function handleSavePendingOrder() {
   if (cart.value.length === 0) {
     toast.add({
@@ -789,24 +637,7 @@ async function handleSavePendingOrder() {
     return;
   }
 
-  const table = currentSelectedTableName.value;
-  const isOccupied = isCurrentTableOccupied.value;
-
-  openConfirmDialog({
-    type: isOccupied ? 'add' : 'hold',
-    title: isOccupied ? 'បញ្ជាក់ការថែមម្ហូបចូលតុ' : 'បញ្ជាក់ការរក្សាទុកតុ',
-    message: isOccupied
-      ? `តើអ្នកពិតជាចង់រក្សាទុកការបន្ថែមមុខម្ហូបចូលក្នុង ${table} និងផ្ញើទៅផ្ទះបាយមែនទេ?`
-      : `តើអ្នកពិតជាចង់រក្សាទុកការកុម្ម៉ង់សម្រាប់ ${table} មែនទេ?`,
-    confirmText: isOccupied ? 'យល់ព្រមថែមម្ហូប' : 'យល់ព្រមរក្សាទុកតុ',
-    details: {
-      name: `មុខម្ហូប ${cart.value.length} មុខ (${cart.value.reduce((a, b) => a + b.quantity, 0)} ចាន)`,
-      subtext: `តម្លៃសរុប៖ $${subtotal.value.toFixed(2)} • តុ៖ ${table}`,
-    },
-    onConfirm: () => {
-      executeSavePendingOrder();
-    },
-  });
+  await executeSavePendingOrder();
 }
 
 async function executeSavePendingOrder() {
@@ -1903,56 +1734,6 @@ function handlePrint() {
       </div>
     </div>
 
-    <!-- MODAL 4: CONFIRMATION POPUP (សម្រាប់បញ្ជាក់ការដក ឬបន្ថែម ជៀសវាងការច្រលំដៃ) -->
-    <div v-if="confirmDialog.isOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-      @click.self="handleConfirmDialogAction(false)">
-      <div
-        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
-        <div class="flex items-start gap-3">
-          <div class="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5"
-            :class="confirmDialog.type === 'remove' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'">
-            <UIcon
-              :name="confirmDialog.type === 'remove' ? 'i-heroicons-trash' : (confirmDialog.type === 'add' ? 'i-heroicons-plus-circle' : 'i-heroicons-arrow-down-on-square')"
-              class="w-6 h-6" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-extrabold text-base text-gray-900 dark:text-white leading-snug">
-              {{ confirmDialog.title }}
-            </h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-              {{ confirmDialog.message }}
-            </p>
-          </div>
-        </div>
-
-        <!-- Details Box -->
-        <div v-if="confirmDialog.details"
-          class="p-3 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 text-xs space-y-1">
-          <p class="font-bold text-gray-900 dark:text-white truncate">
-            {{ confirmDialog.details.name }}
-          </p>
-          <p v-if="confirmDialog.details.subtext" class="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
-            {{ confirmDialog.details.subtext }}
-          </p>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <button type="button"
-            class="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-            @click="handleConfirmDialogAction(false)">
-            បោះបង់
-          </button>
-          <button type="button"
-            class="px-4 py-2 rounded-xl text-xs font-black text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-            :class="confirmDialog.type === 'remove' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-amber-500 hover:bg-amber-600'"
-            @click="handleConfirmDialogAction(true)">
-            <span>{{ confirmDialog.confirmText || 'យល់ព្រម' }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- MODAL 5: PAYMENT CHECKOUT MODAL (ផ្ទាំងជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់ & គិតលុយ) -->
     <div v-if="isPaymentModalOpen"
