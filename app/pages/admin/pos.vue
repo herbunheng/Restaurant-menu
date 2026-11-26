@@ -133,6 +133,47 @@ const lastSavedOrder = ref<Order | null>(null);
 const receiptMode = ref<'official' | 'pre_bill'>('official');
 const isPrintingPreBill = ref(false);
 
+// Payment Checkout Modal State (ជ្រើសរើសវិធីសាស្ត្រទូទាត់ពេលចុចគិតលុយ)
+const isPaymentModalOpen = ref(false);
+const checkoutPaymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
+const checkoutReceivedCash = ref<number | ''>('');
+
+const checkoutChangeUSD = computed(() => {
+  if (checkoutPaymentMethod.value !== 'cash') return 0;
+  const received = Number(checkoutReceivedCash.value) || 0;
+  if (received > totalAmount.value) {
+    return Number((received - totalAmount.value).toFixed(2));
+  }
+  return 0;
+});
+
+const quickCashSuggestions = computed(() => {
+  const tot = totalAmount.value;
+  const set = new Set<number>();
+  const standardDenominations = [5, 10, 20, 50, 100];
+  for (const bill of standardDenominations) {
+    if (bill > tot) {
+      set.add(bill);
+    }
+  }
+  return Array.from(set).slice(0, 4);
+});
+
+function openPaymentModal() {
+  if (cart.value.length === 0) {
+    toast.add({
+      title: 'មិនទាន់មានមុខម្ហូប',
+      description: 'សូមជ្រើសរើសមុខម្ហូបយ៉ាងហោចណាស់មួយមុនពេលគិតលុយ',
+      color: 'warning',
+    });
+    return;
+  }
+
+  checkoutPaymentMethod.value = 'cash';
+  checkoutReceivedCash.value = totalAmount.value;
+  isPaymentModalOpen.value = true;
+}
+
 // Split Bill Modal State
 const isSplitModalOpen = ref(false);
 const splitItems = ref<{
@@ -630,8 +671,8 @@ async function handlePrintPreBill() {
   }
 }
 
-// 3. ACTION: CHECKOUT & CLOSE TABLE (គិតលុយ & បិទតុ)
-async function handleCheckout() {
+// 3. ACTION: EXECUTE CHECKOUT & CLOSE TABLE (គិតលុយ & បិទតុ)
+async function executeCheckout() {
   if (cart.value.length === 0) {
     toast.add({
       title: 'មិនទាន់មានមុខម្ហូប',
@@ -654,7 +695,7 @@ async function handleCheckout() {
         body: {
           items: cart.value,
           discount: Number(discount.value) || 0,
-          paymentMethod: paymentMethod.value,
+          paymentMethod: checkoutPaymentMethod.value,
           paymentStatus: 'paid',
           note: orderNote.value.trim() || '',
         },
@@ -668,7 +709,7 @@ async function handleCheckout() {
           tableNumber: table,
           items: cart.value,
           discount: Number(discount.value) || 0,
-          paymentMethod: paymentMethod.value,
+          paymentMethod: checkoutPaymentMethod.value,
           paymentStatus: 'paid',
           cashierName: 'Cashier 01',
           note: orderNote.value.trim() || '',
@@ -679,6 +720,7 @@ async function handleCheckout() {
 
     lastSavedOrder.value = saved;
     receiptMode.value = 'official';
+    isPaymentModalOpen.value = false;
     isReceiptModalOpen.value = true;
 
     // Reset Cart
@@ -1100,42 +1142,6 @@ function handlePrint() {
           </div>
         </div>
 
-        <!-- Payment Method Selector -->
-        <div class="grid grid-cols-3 gap-1.5 pt-1">
-          <button type="button"
-            class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
-            :class="[
-              paymentMethod === 'cash'
-                ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]" @click="paymentMethod = 'cash'">
-            <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5" />
-            <span>សាច់ប្រាក់</span>
-          </button>
-
-          <button type="button"
-            class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
-            :class="[
-              paymentMethod === 'khqr'
-                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]" @click="paymentMethod = 'khqr'">
-            <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5" />
-            <span>KHQR</span>
-          </button>
-
-          <button type="button"
-            class="py-1.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all border cursor-pointer"
-            :class="[
-              paymentMethod === 'card'
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700',
-            ]" @click="paymentMethod = 'card'">
-            <UIcon name="i-heroicons-credit-card" class="w-3.5 h-3.5" />
-            <span>កាត</span>
-          </button>
-        </div>
-
         <!-- ACTIONS: OCCUPIED (Save / Pre-Bill / Checkout) vs NEW (Hold / Checkout) -->
         <div v-if="isCurrentTableOccupied" class="grid grid-cols-3 gap-1.5 pt-1">
           <!-- Button 1: Save / Append Items -->
@@ -1159,7 +1165,7 @@ function handlePrint() {
           <!-- Button 3: Checkout -->
           <button type="button" :disabled="cart.length === 0 || isSubmitting || isPrintingPreBill"
             class="py-2.5 px-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="គិតលុយគ្រប់ចំនួន និងបិទតុ" @click="handleCheckout">
+            title="គិតលុយគ្រប់ចំនួន និងបិទតុ" @click="openPaymentModal">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
             <span>គិតលុយ</span>
@@ -1179,7 +1185,7 @@ function handlePrint() {
           <!-- Button 2: Pay & Close Table -->
           <button type="button" :disabled="cart.length === 0 || isSubmitting"
             class="py-2.5 px-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            @click="handleCheckout">
+            @click="openPaymentModal">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-3.5 h-3.5 animate-spin" />
             <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
             <span>គិតលុយ</span>
@@ -1519,6 +1525,232 @@ function handlePrint() {
             :class="confirmDialog.type === 'remove' ? 'bg-rose-600 hover:bg-rose-500' : 'bg-amber-500 hover:bg-amber-600'"
             @click="handleConfirmDialogAction(true)">
             <span>{{ confirmDialog.confirmText || 'យល់ព្រម' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 5: PAYMENT CHECKOUT MODAL (ផ្ទាំងជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់ & គិតលុយ) -->
+    <div
+      v-if="isPaymentModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+      @click.self="isPaymentModalOpen = false"
+    >
+      <div class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[95vh] flex flex-col overflow-y-auto">
+        <!-- Header -->
+        <div class="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <span>គិតលុយ & ទូទាត់ប្រាក់</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              {{ currentSelectedTableName }} • {{ cart.length }} មុខម្ហូប ({{ cart.reduce((a, b) => a + b.quantity, 0) }} ចាន)
+            </p>
+          </div>
+          <button
+            type="button"
+            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="isPaymentModalOpen = false"
+          >
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Total Bill Card -->
+        <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-1">
+          <span class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">ទឹកប្រាក់សរុបត្រូវទូទាត់</span>
+          <div class="flex items-baseline justify-center gap-2">
+            <span class="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+              ${{ totalAmount.toFixed(2) }}
+            </span>
+          </div>
+          <span class="block text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">
+            ≈ {{ formatRiel(totalAmount) }} ៛
+          </span>
+          <p v-if="discount > 0" class="text-[11px] text-amber-600 font-semibold pt-1">
+            (បានចុះថ្លៃបញ្ចុះតម្លៃ -${{ discount.toFixed(2) }} រួចរាល់)
+          </p>
+        </div>
+
+        <!-- Payment Method Options (3 Big Cards) -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-gray-700 dark:text-gray-300 block">
+            ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់៖
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <!-- 1. Cash -->
+            <button
+              type="button"
+              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
+              :class="[
+                checkoutPaymentMethod === 'cash'
+                  ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/30 font-bold shadow-xs'
+                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+              ]"
+              @click="checkoutPaymentMethod === 'cash'"
+            >
+              <div
+                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
+                :class="checkoutPaymentMethod === 'cash' ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+              >
+                <UIcon name="i-heroicons-banknotes" class="w-5 h-5" />
+              </div>
+              <span class="text-xs">សាច់ប្រាក់</span>
+              <span class="text-[10px] text-gray-400 font-mono">Cash</span>
+            </button>
+
+            <!-- 2. KHQR -->
+            <button
+              type="button"
+              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
+              :class="[
+                checkoutPaymentMethod === 'khqr'
+                  ? 'border-rose-600 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 ring-2 ring-rose-500/30 font-bold shadow-xs'
+                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+              ]"
+              @click="checkoutPaymentMethod = 'khqr'"
+            >
+              <div
+                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
+                :class="checkoutPaymentMethod === 'khqr' ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+              >
+                <UIcon name="i-heroicons-qr-code" class="w-5 h-5" />
+              </div>
+              <span class="text-xs">KHQR</span>
+              <span class="text-[10px] text-gray-400 font-mono">Bakong Scan</span>
+            </button>
+
+            <!-- 3. Card -->
+            <button
+              type="button"
+              class="p-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer group text-center"
+              :class="[
+                checkoutPaymentMethod === 'card'
+                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/30 font-bold shadow-xs'
+                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+              ]"
+              @click="checkoutPaymentMethod = 'card'"
+            >
+              <div
+                class="w-9 h-9 rounded-xl flex items-center justify-center transition-colors"
+                :class="checkoutPaymentMethod === 'card' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'"
+              >
+                <UIcon name="i-heroicons-credit-card" class="w-5 h-5" />
+              </div>
+              <span class="text-xs">កាតធនាគារ</span>
+              <span class="text-[10px] text-gray-400 font-mono">Card POS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Conditional details for Cash (ប្រាក់ទទួល & ប្រាក់អាប់) -->
+        <div v-if="checkoutPaymentMethod === 'cash'" class="p-3.5 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70 space-y-3">
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-gray-700 dark:text-gray-300">ប្រាក់ទទួលពីភ្ញៀវ៖</span>
+              <span class="text-gray-400 text-[11px] font-mono">គិតជាដុល្លារ ($)</span>
+            </div>
+
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-base font-black text-gray-400">$</span>
+              <input
+                v-model.number="checkoutReceivedCash"
+                type="number"
+                step="0.5"
+                min="0"
+                placeholder="0.00"
+                class="w-full pl-8 pr-3 py-2 text-base font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+              />
+            </div>
+
+            <!-- Quick Bills Suggestions -->
+            <div class="flex flex-wrap items-center gap-1.5 pt-1">
+              <button
+                type="button"
+                class="px-2 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-emerald-600 transition-colors cursor-pointer font-mono"
+                @click="checkoutReceivedCash = totalAmount"
+              >
+                ${{ totalAmount.toFixed(2) }} (គ្រប់)
+              </button>
+              <button
+                v-for="s in quickCashSuggestions"
+                :key="s"
+                type="button"
+                class="px-2 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer font-mono"
+                @click="checkoutReceivedCash = s"
+              >
+                ${{ s }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Change calculation display -->
+          <div class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-gray-700 dark:text-gray-300 block">ប្រាក់អាប់ជូនភ្ញៀវ៖</span>
+              <span class="text-[10px] text-gray-400 font-mono">≈ {{ formatRiel(checkoutChangeUSD) }} ៛</span>
+            </div>
+            <span
+              class="text-xl font-black font-mono"
+              :class="checkoutChangeUSD > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'"
+            >
+              ${{ checkoutChangeUSD.toFixed(2) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Conditional details for KHQR -->
+        <div v-else-if="checkoutPaymentMethod === 'khqr'" class="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/60 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+            <UIcon name="i-heroicons-qr-code" class="w-6 h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-bold text-rose-900 dark:text-rose-200">ទូទាត់តាម KHQR / Bakong</p>
+            <p class="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5 leading-relaxed">
+              សូមឱ្យភ្ញៀវស្កេនទូទាត់ទឹកប្រាក់ ${{ totalAmount.toFixed(2) }} ({{ formatRiel(totalAmount) }} ៛) តាម QR Standee លើតុ ឬទូរស័ព្ទ។
+            </p>
+          </div>
+        </div>
+
+        <!-- Conditional details for Card -->
+        <div v-else-if="checkoutPaymentMethod === 'card'" class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+            <UIcon name="i-heroicons-credit-card" class="w-6 h-6" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-bold text-blue-900 dark:text-blue-200">ទូទាត់តាមកាតធនាគារ</p>
+            <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
+              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន ${{ totalAmount.toFixed(2) }} មុននឹងចុចបញ្ជាក់។
+            </p>
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <button
+            type="button"
+            class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            @click="isPaymentModalOpen = false"
+          >
+            បោះបង់
+          </button>
+          <button
+            type="button"
+            :disabled="isSubmitting"
+            class="flex-2 py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+            :class="[
+              checkoutPaymentMethod === 'khqr'
+                ? 'bg-rose-600 hover:bg-rose-500'
+                : checkoutPaymentMethod === 'card'
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-emerald-600 hover:bg-emerald-500'
+            ]"
+            @click="executeCheckout"
+          >
+            <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+            <UIcon v-else name="i-heroicons-check-circle" class="w-4 h-4" />
+            <span>បញ្ជាក់ការបង់ប្រាក់ (${{ totalAmount.toFixed(2) }}) & ចេញវិក្កយបត្រ</span>
           </button>
         </div>
       </div>
