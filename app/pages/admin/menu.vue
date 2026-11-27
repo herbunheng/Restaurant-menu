@@ -24,8 +24,19 @@ const menuList = computed(() => menuData.value || []);
 const categoriesList = computed(() => categoriesData.value || []);
 const isLoading = computed(() => menuStatus.value === 'pending' || catStatus.value === 'pending');
 
-// View Tab
-const activeTab = ref<'items' | 'categories'>('items');
+const route = useRoute();
+const router = useRouter();
+
+type MenuAdminTab = 'menu' | 'categories';
+const activeTab = computed<MenuAdminTab>(() => {
+  const q = String(route.query.tab || '').toLowerCase();
+  if (q === 'categories') return 'categories';
+  return 'menu';
+});
+
+function setActiveTab(tab: MenuAdminTab) {
+  router.replace({ query: { ...route.query, tab } });
+}
 
 // Filter & Search
 const searchQuery = ref('');
@@ -485,10 +496,10 @@ function formatRiel(usd: number): string {
       <button type="button"
         class="flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer"
         :class="[
-          activeTab === 'items'
+          activeTab === 'menu'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-        ]" @click="activeTab = 'items'">
+        ]" @click="setActiveTab('menu')">
         <UIcon name="i-heroicons-list-bullet" class="w-4 h-4" />
         <span>Menu Items (បញ្ជីមុខម្ហូប)</span>
         <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800">{{ totalItems }}</span>
@@ -500,7 +511,7 @@ function formatRiel(usd: number): string {
           activeTab === 'categories'
             ? 'border-primary-600 text-primary-600 dark:text-primary-400'
             : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-        ]" @click="activeTab = 'categories'">
+        ]" @click="setActiveTab('categories')">
         <UIcon name="i-heroicons-rectangle-stack" class="w-4 h-4" />
         <span>Categories (ប្រភេទមុខម្ហូប)</span>
         <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800">{{ totalCategories }}</span>
@@ -508,7 +519,7 @@ function formatRiel(usd: number): string {
     </div>
 
     <!-- TAB 1: MENU ITEMS LIST -->
-    <div v-if="activeTab === 'items'" class="space-y-4">
+    <div v-if="activeTab === 'menu'" class="space-y-4">
       <!-- Search & Filters -->
       <div
         class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
@@ -645,7 +656,7 @@ function formatRiel(usd: number): string {
     </div>
 
     <!-- TAB 2: CATEGORIES MANAGEMENT -->
-    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div v-else-if="activeTab === 'categories'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Create Category Form Card -->
       <div
         class="p-6 rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">

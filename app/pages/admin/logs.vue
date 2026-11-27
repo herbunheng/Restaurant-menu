@@ -22,6 +22,10 @@ const { data: logsData, status, error, refresh: fetchAuditLogs } = await useApiD
 
 const logsList = computed(() => logsData.value || []);
 const isLoading = computed(() => status.value === 'pending');
+const isErrorDismissed = ref(false);
+watch(error, () => {
+  isErrorDismissed.value = false;
+});
 const errorMessage = computed(() => error.value?.message || '');
 
 const availableActions = computed(() => {
@@ -121,8 +125,8 @@ function getActionColor(action: string) {
     </div>
 
     <!-- Error Alert -->
-    <UAlert v-if="errorMessage" color="error" variant="soft" icon="i-heroicons-exclamation-triangle"
-      :title="errorMessage" class="text-xs" close @close="errorMessage = ''" />
+    <UAlert v-if="errorMessage && !isErrorDismissed" color="error" variant="soft" icon="i-heroicons-exclamation-triangle"
+      :title="errorMessage" class="text-xs" close @close="isErrorDismissed = true" />
 
     <!-- Multi-Filter & Search Toolbar -->
     <div

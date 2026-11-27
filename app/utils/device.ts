@@ -31,3 +31,27 @@ export function getDeviceIcon(device: string): string {
       return 'i-heroicons-computer-desktop';
   }
 }
+
+/**
+ * Converts a 2-letter ISO country code to a human-readable country name
+ */
+export function getCountryName(countryCode?: string | null): string {
+  const code = (countryCode || '').trim().toUpperCase();
+  if (!code || code === 'XX' || code === 'UNKNOWN') return 'Unknown';
+  if (code.length !== 2) return countryCode || 'Unknown';
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    return displayNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+/**
+ * Converts a 2-letter ISO country code to its flag emoji
+ */
+export function getCountryFlag(countryCode?: string | null): string {
+  const code = (countryCode || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || code === 'XX') return '🌐';
+  return String.fromCodePoint(...[...code].map((ch) => 127397 + ch.charCodeAt(0)));
+}

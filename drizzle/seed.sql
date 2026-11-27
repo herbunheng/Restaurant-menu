@@ -43,3 +43,4 @@ INSERT OR REPLACE INTO `menu_items` (`id`, `name`, `category_id`, `price`, `curr
 ('item_03', 'Khmer Iced Coffee with Milk (កាហ្វេទឹកដោះគោទឹកកក)', 'cat_drinks', 2.0, 'USD', 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80', 'Rich dark drip coffee brewed with sweetened condensed milk and served over crushed ice.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000),
 ('item_04', 'Mango Sticky Rice (បាយដំណើបស្វាយ)', 'cat_desserts', 3.5, 'USD', 'https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=600&q=80', 'Sweet sticky coconut rice served with ripe sweet mango slices and toasted sesame seeds.', 1, strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000);
 
+

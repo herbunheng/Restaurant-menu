@@ -18,6 +18,7 @@ import { menuRouter } from './routes/menu';
 import { ordersRouter } from './routes/orders';
 import { staffRouter } from './routes/staff';
 import { paymentMethodsRouter } from './routes/payment_methods';
+import { ledgerRouter } from './routes/ledger';
 import type { AppEnv } from './types';
 
 export function createApp() {
@@ -69,6 +70,7 @@ export function createApp() {
   app.route('/api/orders', ordersRouter);
   app.route('/api/staff', staffRouter);
   app.route('/api/payment-methods', paymentMethodsRouter);
+  app.route('/api/ledger', ledgerRouter);
 
   // Root Endpoint
   app.get('/', (c) => {

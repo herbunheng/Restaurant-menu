@@ -7,7 +7,8 @@ import {
   convertKhrToUsd,
   formatKhrAmount,
 } from '@restaurant-menu/shared';
-import type { MenuItem, Category, Order, OrderItem, Staff, PaymentMethodConfig } from '@restaurant-menu/shared';
+import type { MenuItem, Category, Order, OrderItem, Staff, PaymentMethodConfig, LedgerEntry, LedgerEntryType } from '@restaurant-menu/shared';
+type PaymentMethod = 'cash' | 'khqr' | 'card';
 
 definePageMeta({
   layout: 'admin',
@@ -134,7 +135,8 @@ const filteredItems = computed(() => {
 // Cart / Order Slip State
 const cart = ref<OrderItem[]>([]);
 const discount = ref<number>(0);
-const paymentMethod = ref<'cash' | 'khqr' | 'card'>('cash');
+const paymentMethod = ref<PaymentMethod>('cash');
+
 const orderNote = ref('');
 const isSubmitting = ref(false);
 
@@ -190,8 +192,8 @@ function syncTableOrder() {
     cart.value = JSON.parse(JSON.stringify(existingOrder.items));
     discount.value = existingOrder.discount || 0;
     orderNote.value = existingOrder.note || '';
-    paymentMethod.value = existingOrder.paymentMethod || 'cash';
-
+    paymentMethod.value =
+      (existingOrder?.paymentMethod as PaymentMethod) || 'cash';
     // Synchronize Waiter Name
     const w = existingOrder.waiterName || '';
     if (!w) {
@@ -370,7 +372,9 @@ const mixedCashUSD = ref<number | ''>('');
 const mixedOnlineUSD = ref<number | ''>('');
 const mixedOnlineBank = ref<string>('aba');
 const mixedNoteInput = ref<string>('');
-
+const isMixedOnlineUSDValid = computed(() => {
+  return Number(mixedOnlineUSD.value) > 0;
+});
 const onlinePaymentMethods = computed(() => {
   return activePaymentMethods.value.filter((m) => m.code !== 'cash' && m.code !== 'card');
 });
@@ -426,6 +430,7 @@ const currentSelectedPaymentMethodObj = computed(() => {
 function getPaymentMethodLabel(code: string | undefined | null): string {
   if (!code) return 'សាច់ប្រាក់';
   if (code === 'mixed') return 'បង់ចម្រុះ (សាច់ប្រាក់ + Pay Online)';
+  if (code === 'owner_meal') return 'មេហូប (អត់គិតលុយ)';
   const found = activePaymentMethods.value.find((m) => m.code === code);
   if (found) return found.name;
   if (code === 'cash') return 'សាច់ប្រាក់ (Cash)';
@@ -435,6 +440,108 @@ function getPaymentMethodLabel(code: string | undefined | null): string {
   if (code === 'card') return 'កាតធនាគារ (Card)';
   if (code === 'khqr') return 'KHQR / Bakong';
   return code;
+}
+
+// ==========================================
+// Cash Ledger Modal State (បំណុល & មេហូប)
+// ==========================================
+const isLedgerModalOpen = ref(false);
+const ledgerType = ref<LedgerEntryType>('receivable');
+const ledgerPersonName = ref('');
+const ledgerAmountKHR = ref<number | ''>('');
+const ledgerAmountUSD = ref<number | ''>('');
+const ledgerNote = ref('');
+const isSubmittingLedger = ref(false);
+const todayStrForLedger = new Date().toISOString().slice(0, 10);
+
+const { data: todayLedgerData, refresh: refreshTodayLedger } = await useApiData<LedgerEntry[]>(
+  'pos-today-ledger',
+  () => `/api/ledger?date=${todayStrForLedger}`
+);
+const todayLedgerList = computed(() => todayLedgerData.value || []);
+
+function onLedgerKHRInput() {
+  const khr = Number(ledgerAmountKHR.value) || 0;
+  ledgerAmountUSD.value = khr > 0 ? Number((khr / currentExchangeRate.value).toFixed(2)) : '';
+}
+
+function onLedgerUSDInput() {
+  const usd = Number(ledgerAmountUSD.value) || 0;
+  ledgerAmountKHR.value = usd > 0 ? Math.round(usd * currentExchangeRate.value) : '';
+}
+
+function openLedgerModal(defaultType: LedgerEntryType = 'receivable') {
+  ledgerType.value = defaultType;
+  ledgerPersonName.value = '';
+  ledgerAmountKHR.value = '';
+  ledgerAmountUSD.value = '';
+  ledgerNote.value = '';
+  isLedgerModalOpen.value = true;
+}
+
+function getLedgerTypeLabel(type: LedgerEntryType): string {
+  switch (type) {
+    case 'receivable': return 'លុយគេជំពាក់ (មិនទាន់បង់)';
+    case 'payable': return 'លុយជំពាក់គេ';
+    case 'repayment': return 'លុយសងគេ';
+    case 'owner_meal': return 'មេហូប';
+  }
+}
+
+async function handleCreateLedgerEntry() {
+  const khr = Number(ledgerAmountKHR.value) || 0;
+  const usd = Number(ledgerAmountUSD.value) || 0;
+  if (khr <= 0 && usd <= 0) {
+    toast.add({
+      title: 'សូមបញ្ចូលចំនួនទឹកប្រាក់',
+      color: 'warning',
+    });
+    return;
+  }
+
+  isSubmittingLedger.value = true;
+  try {
+    await $api('/api/ledger', {
+      method: 'POST',
+      body: {
+        type: ledgerType.value,
+        personName: ledgerPersonName.value.trim(),
+        amountKHR: khr || Math.round(usd * currentExchangeRate.value),
+        amountUSD: usd || Number((khr / currentExchangeRate.value).toFixed(2)),
+        note: ledgerNote.value.trim(),
+        recordedBy: activeWaiterName.value || 'Cashier 01',
+      },
+    });
+
+    toast.add({
+      title: 'កត់ត្រាជោគជ័យ',
+      description: getLedgerTypeLabel(ledgerType.value),
+      color: 'success',
+    });
+    ledgerPersonName.value = '';
+    ledgerAmountKHR.value = '';
+    ledgerAmountUSD.value = '';
+    ledgerNote.value = '';
+    await refreshTodayLedger();
+  } catch (err: any) {
+    toast.add({
+      title: 'បរាជ័យក្នុងការកត់ត្រា',
+      description: err.message || 'Failed to save entry',
+      color: 'error',
+    });
+  } finally {
+    isSubmittingLedger.value = false;
+  }
+}
+
+async function handleDeleteLedgerEntry(id: string) {
+  try {
+    await $api(`/api/ledger/${id}`, { method: 'DELETE' });
+    await refreshTodayLedger();
+    toast.add({ title: 'បានលុបកំណត់ត្រា', color: 'neutral' });
+  } catch (err: any) {
+    toast.add({ title: 'មិនអាចលុបបានទេ', description: err.message, color: 'error' });
+  }
 }
 
 function openPaymentModal() {
@@ -973,7 +1080,19 @@ function handlePrint() {
               <span>កន្លែងគិតលុយ</span>
             </h1>
 
-            <div class="flex items-center gap-2 text-xs">
+            <div class="flex items-center gap-2 text-xs flex-wrap">
+              <!-- Debt & Owner Meal Ledger Button -->
+              <button type="button"
+                class="py-1 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/60 shadow-2xs"
+                @click="openLedgerModal('receivable')">
+                <UIcon name="i-heroicons-book-open" class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>បំណុល & មេហូប</span>
+                <span v-if="todayLedgerList.length > 0"
+                  class="px-1.5 py-0.2 rounded-full bg-amber-600 text-white text-[10px] font-mono">
+                  {{ todayLedgerList.length }}
+                </span>
+              </button>
+
               <!-- Live Exchange Rate Switcher Button -->
               <button type="button"
                 class="py-1 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 shadow-2xs group"
@@ -1509,144 +1628,166 @@ function handlePrint() {
 
     <!-- MODAL 2: RECEIPT POPUP / PRINT VIEW -->
     <div v-if="isReceiptModalOpen && lastSavedOrder"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+      @click.self="isReceiptModalOpen = false; lastSavedOrder = null;">
       <div
-        class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4">
-        <!-- Receipt Content -->
-        <div id="receipt-print-area" class="space-y-4 text-center">
-          <div>
-            <h2 class="text-lg font-black text-gray-900 dark:text-white">វិក្កយបត្រភោជនីយដ្ឋាន</h2>
+        class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        <!-- Scrollable Receipt Content -->
+        <div id="receipt-print-area" class="flex-1 overflow-y-auto p-6 space-y-5">
+          <!-- Title & Status Banner -->
+          <div class="text-center space-y-3">
+            <h2 class="text-lg font-black text-gray-900 dark:text-white tracking-tight">
+              វិក្កយបត្រភោជនីយដ្ឋាន
+            </h2>
 
-            <!-- Pre-Bill vs Official Header Badge -->
-            <div class="mt-2">
-              <div v-if="receiptMode === 'pre_bill'"
-                class="p-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200 space-y-0.5">
-                <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
-                  <UIcon name="i-heroicons-document-magnifying-glass"
-                    class="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span>វិក្កយបត្របណ្តោះអាសន្ន</span>
-                </div>
-                <p class="text-[10px] text-purple-600 dark:text-purple-300 font-semibold">
-                  (មិនទាន់ទូទាត់ប្រាក់ • សម្រាប់ភ្ញៀវផ្ទៀងផ្ទាត់)
-                </p>
+            <div v-if="receiptMode === 'pre_bill'"
+              class="px-4 py-2.5 rounded-2xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200">
+              <div class="flex items-center justify-center gap-1.5 font-extrabold text-xs">
+                <UIcon name="i-heroicons-document-magnifying-glass"
+                  class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                <span>វិក្កយបត្របណ្តោះអាសន្ន</span>
               </div>
-
-              <div v-else
-                class="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 space-y-0.5">
-                <div class="flex items-center justify-center gap-1 font-black text-xs uppercase tracking-wider">
-                  <UIcon name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>វិក្កយបត្រផ្លូវការ</span>
-                </div>
-                <p class="text-[10px] text-emerald-600 dark:text-emerald-300 font-semibold">
-                  (បានទូទាត់ប្រាក់រួចរាល់)
-                </p>
-              </div>
+              <p class="text-[11px] text-purple-600 dark:text-purple-300 mt-0.5">
+                មិនទាន់ទូទាត់ប្រាក់ • សម្រាប់ភ្ញៀវផ្ទៀងផ្ទាត់
+              </p>
             </div>
 
-            <p class="text-[11px] text-gray-500 font-mono mt-2">
-              លេខកុម្ម៉ង់ #{{ lastSavedOrder.orderNumber }} • {{ lastSavedOrder.tableNumber }}
+            <div v-else
+              class="px-4 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200">
+              <div class="flex items-center justify-center gap-1.5 font-extrabold text-xs">
+                <UIcon name="i-heroicons-check-badge" class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>ទូទាត់ប្រាក់ជោគជ័យ • វិក្កយបត្រផ្លូវការ</span>
+              </div>
+              <p class="text-[11px] text-emerald-600 dark:text-emerald-300 mt-0.5">
+                បានបិទតុ និងទូទាត់ប្រាក់រួចរាល់
+              </p>
+            </div>
+
+            <!-- Order Number, Table & Date -->
+            <div class="flex items-center justify-center gap-2 text-xs font-mono text-gray-600 dark:text-gray-300 pt-1">
+              <span
+                class="px-2.5 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 font-bold text-gray-900 dark:text-white">
+                #{{ lastSavedOrder.orderNumber }}
+              </span>
+              <span>•</span>
+              <span class="font-sans font-bold text-gray-800 dark:text-gray-200">
+                {{ lastSavedOrder.tableNumber }}
+              </span>
+            </div>
+            <p class="text-[11px] text-gray-400 font-mono">
+              {{ new Date(lastSavedOrder.createdAt || Date.now()).toLocaleString() }}
             </p>
-            <p class="text-[10px] text-gray-400 font-mono">
-              កាលបរិច្ឆេទ៖ {{ new Date(lastSavedOrder.createdAt || Date.now()).toLocaleString() }}
-            </p>
+          </div>
 
-            <!-- Staff Tracking details on Receipt -->
-            <div
-              class="mt-2 pt-2 border-t border-dashed border-gray-200 dark:border-gray-800 text-left text-[11px] space-y-1">
-              <div class="flex items-center justify-between text-gray-600 dark:text-gray-300">
-                <span class="flex items-center gap-1 font-semibold">
-                  <UIcon name="i-heroicons-user" class="w-3.5 h-3.5 text-primary-500" />
-                  <span>អ្នកកត់ Order (Waiter)៖</span>
-                </span>
-                <span class="font-bold text-gray-900 dark:text-white">{{ lastSavedOrder.waiterName || 'Cashier'
-                }}</span>
-              </div>
-
-              <div v-if="lastSavedOrder.billedBy"
-                class="flex items-center justify-between text-purple-700 dark:text-purple-300">
-                <span class="flex items-center gap-1 font-semibold">
-                  <UIcon name="i-heroicons-document-text" class="w-3.5 h-3.5" />
-                  <span>អ្នកកាន់បុងទៅភ្ញៀវ៖</span>
-                </span>
-                <span class="font-bold underline decoration-dotted">{{ lastSavedOrder.billedBy }}</span>
-              </div>
-
-              <div v-if="lastSavedOrder.billedAt"
-                class="flex items-center justify-between text-[10px] text-gray-400 font-mono">
-                <span>ម៉ោងចេញបុង៖</span>
-                <span>{{ new Date(lastSavedOrder.billedAt).toLocaleTimeString() }}</span>
-              </div>
-
-              <div class="flex items-center justify-between text-[10px] text-gray-400">
-                <span>បេឡាករ (Cashier)៖</span>
-                <span class="font-mono">{{ lastSavedOrder.cashierName || 'Cashier 01' }}</span>
-              </div>
+          <!-- Staff Tracking Details -->
+          <div
+            class="rounded-2xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 px-4 py-3 text-xs space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-gray-500 dark:text-gray-400">អ្នកកត់ Order (Waiter)</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ lastSavedOrder.waiterName || 'Cashier' }}</span>
+            </div>
+            <div v-if="lastSavedOrder.billedBy" class="flex items-center justify-between">
+              <span class="text-purple-600 dark:text-purple-400">អ្នកកាន់បុងទៅភ្ញៀវ</span>
+              <span class="font-bold text-purple-700 dark:text-purple-300">{{ lastSavedOrder.billedBy }}</span>
+            </div>
+            <div v-if="lastSavedOrder.billedAt" class="flex items-center justify-between text-[11px]">
+              <span class="text-gray-400">ម៉ោងចេញបុង</span>
+              <span class="font-mono text-gray-500 dark:text-gray-400">{{ new
+                Date(lastSavedOrder.billedAt).toLocaleTimeString() }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-gray-500 dark:text-gray-400">បេឡាករ (Cashier)</span>
+              <span class="font-mono font-semibold text-gray-800 dark:text-gray-200">{{ lastSavedOrder.cashierName ||
+                'Cashier 01' }}</span>
             </div>
           </div>
 
-          <div class="border-t border-b border-dashed border-gray-300 dark:border-gray-700 py-3 space-y-2 text-left">
+          <!-- Itemized List -->
+          <div class="border-t border-b border-dashed border-gray-200 dark:border-gray-700 py-3.5 space-y-3">
             <div v-for="(it, itIdx) in lastSavedOrder.items" :key="itIdx"
-              class="flex items-start justify-between text-xs">
-              <div class="flex-1">
-                <p class="font-bold text-gray-900 dark:text-white">{{ it.name }}</p>
-                <p v-if="it.variantLabel" class="text-[10px] text-gray-500 font-mono">
-                  {{ it.variantLabel }} x {{ it.quantity }}
-                </p>
+              class="flex items-start justify-between gap-3 text-xs">
+              <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                <span
+                  class="inline-flex items-center justify-center min-w-[24px] h-5 px-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono font-bold text-[11px] shrink-0 mt-0.5">
+                  {{ it.quantity }}x
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="font-bold text-gray-900 dark:text-white leading-snug">{{ it.name }}</p>
+                  <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    <span v-if="it.variantLabel">{{ it.variantLabel }} • </span>
+                    <span class="font-mono">${{ it.price.toFixed(2) }}</span>
+                  </p>
+                </div>
               </div>
-              <span class="font-black font-mono text-gray-900 dark:text-white">
+              <span class="font-black font-mono text-gray-900 dark:text-white shrink-0">
                 ${{ it.subtotal.toFixed(2) }}
               </span>
             </div>
           </div>
 
           <!-- Total Calculation -->
-          <div class="space-y-1 text-xs">
-            <div class="flex justify-between text-gray-500">
-              <span>សរុបដើម:</span>
-              <span class="font-mono font-bold">${{ lastSavedOrder.subtotal.toFixed(2) }}</span>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between text-gray-500 dark:text-gray-400 px-1">
+              <span>សរុបដើម</span>
+              <span class="font-mono font-bold text-gray-800 dark:text-gray-200">${{ lastSavedOrder.subtotal.toFixed(2)
+              }}</span>
             </div>
-            <div v-if="lastSavedOrder.discount" class="flex justify-between text-gray-500">
-              <span>ចុះថ្លៃ:</span>
+            <div v-if="lastSavedOrder.discount" class="flex justify-between text-amber-600 dark:text-amber-400 px-1">
+              <span>ចុះថ្លៃ</span>
               <span class="font-mono font-bold">-${{ lastSavedOrder.discount.toFixed(2) }}</span>
             </div>
-            <div
-              class="flex justify-between items-baseline text-base font-black text-emerald-600 dark:text-emerald-400 pt-1.5 border-t border-gray-200 dark:border-gray-700">
-              <span>សរុប (រៀល):</span>
-              <span class="font-mono text-lg">{{ formatRiel(lastSavedOrder.totalAmount) }} ៛</span>
-            </div>
-            <div class="flex justify-between text-xs text-gray-500 font-medium">
-              <span>សរុប (ដុល្លារ):</span>
-              <span class="font-mono font-bold">${{ lastSavedOrder.totalAmount.toFixed(2) }} ($1 = 4,000 ៛)</span>
+
+            <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+              <div class="flex justify-between items-baseline">
+                <span class="font-bold text-emerald-800 dark:text-emerald-300">សរុប (រៀល)</span>
+                <span class="font-mono text-xl font-black text-emerald-600 dark:text-emerald-400">
+                  {{ formatRielPrice(lastSavedOrder.totalAmount) }} ៛
+                </span>
+              </div>
+              <div class="flex justify-between items-center text-[11px] text-gray-500 dark:text-gray-400">
+                <span>សរុប (ដុល្លារ)</span>
+                <span class="font-mono font-semibold text-gray-700 dark:text-gray-300">
+                  ${{ lastSavedOrder.totalAmount.toFixed(2) }} ($1 = {{ currentExchangeRate.toLocaleString() }} ៛)
+                </span>
+              </div>
             </div>
           </div>
 
           <!-- Footer Notice for Pre-bill vs Official -->
           <div v-if="receiptMode === 'pre_bill'"
-            class="pt-2 text-center text-[10px] text-gray-500 dark:text-gray-400 space-y-1">
+            class="pt-1 text-center text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
             <p class="font-bold text-purple-700 dark:text-purple-400">
               * សូមពិនិត្យមើលមុខម្ហូប និងចំនួនទឹកប្រាក់
             </p>
             <p>វិក្កយបត្រនេះមិនទាន់ជាបង្កាន់ដៃទទួលប្រាក់ឡើយ</p>
-            <p v-if="lastSavedOrder.billedBy" class="text-purple-600 dark:text-purple-400 font-bold text-[10px]">
+            <p v-if="lastSavedOrder.billedBy" class="text-purple-600 dark:text-purple-400 font-bold">
               បុគ្គលិកទទួលបន្ទុកកាន់បុង៖ {{ lastSavedOrder.billedBy }}
             </p>
           </div>
 
-          <div v-else class="pt-2 text-center text-[11px] text-gray-400 space-y-1">
-            <p>ការទូទាត់៖ <span class="font-bold text-gray-700 dark:text-gray-300">{{
-              getPaymentMethodLabel(lastSavedOrder.paymentMethod) }}</span></p>
+          <div v-else class="pt-1 text-center text-xs text-gray-500 dark:text-gray-400 space-y-2">
+            <div
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-[11px]">
+              <span>ការទូទាត់៖</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{
+                getPaymentMethodLabel(lastSavedOrder.paymentMethod)
+              }}</span>
+            </div>
             <p v-if="lastSavedOrder.note"
-              class="text-[10px] text-indigo-700 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/40 p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-900/50">
+              class="text-[11px] text-indigo-700 dark:text-indigo-400 font-medium bg-indigo-50 dark:bg-indigo-950/40 px-3 py-2 rounded-xl border border-indigo-200/70 dark:border-indigo-900/50">
               {{ lastSavedOrder.note }}
             </p>
-            <p class="mt-1 font-bold text-emerald-600 dark:text-emerald-400">សូមអរគុណ និងសូមអញ្ជើញមកពិសាម្តងទៀត!</p>
+            <p class="font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+              សូមអរគុណ និងសូមអញ្ជើញមកពិសាម្តងទៀត!
+            </p>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <!-- Action Buttons Footer -->
+        <div
+          class="flex items-center gap-2.5 px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900 shrink-0">
           <button type="button"
-            class="flex-1 py-2 rounded-xl text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 cursor-pointer"
+            class="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
             @click="
               isReceiptModalOpen = false;
             lastSavedOrder = null;
@@ -1654,7 +1795,7 @@ function handlePrint() {
             បិទ
           </button>
           <button type="button"
-            class="flex-1 py-2 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+            class="flex-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
             :class="receiptMode === 'pre_bill' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-primary-600 hover:bg-primary-500'"
             @click="handlePrint">
             <UIcon name="i-heroicons-printer" class="w-4 h-4" />
@@ -1788,394 +1929,504 @@ function handlePrint() {
     </div>
 
 
-    <!-- MODAL 5: PAYMENT CHECKOUT MODAL (ផ្ទាំងជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់ & គិតលុយ) -->
+    <!-- MODAL 5: PAYMENT CHECKOUT MODAL (ផ្ទាំងបង្ហាញបុងពេញលេញ & ទូទាត់ប្រាក់) -->
     <div v-if="isPaymentModalOpen"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
       @click.self="isPaymentModalOpen = false">
       <div
-        class="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl p-6 space-y-4 max-h-[95vh] flex flex-col overflow-y-auto">
+        class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
         <!-- Header -->
-        <div class="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-          <div>
-            <h3 class="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
-              <UIcon name="i-heroicons-banknotes" class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              <span>គិតលុយ & ទូទាត់ប្រាក់</span>
-            </h3>
-            <p class="text-xs text-gray-500 mt-0.5">
-              {{ currentSelectedTableName }} • {{ cart.length }} មុខម្ហូប ({{cart.reduce((a, b) => a + b.quantity, 0)
-              }}
-              ចាន)
-            </p>
+        <div
+          class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800 shrink-0 bg-gray-50/60 dark:bg-gray-900">
+          <div class="flex items-center gap-2.5">
+            <div
+              class="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <UIcon name="i-heroicons-banknotes" class="w-4 h-4" />
+            </div>
+            <div>
+              <h3 class="font-black text-base text-gray-900 dark:text-white leading-tight">
+                គិតលុយ & ទូទាត់ប្រាក់
+              </h3>
+              <p class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5">
+                <span class="font-bold text-gray-700 dark:text-gray-300">{{ currentSelectedTableName }}</span>
+                <span>•</span>
+                <span>{{ cart.length }} មុខ ({{cart.reduce((a, b) => a + b.quantity, 0)}} ចាន)</span>
+                <template v-if="activeWaiterName">
+                  <span>•</span>
+                  <span>Waiter: {{ activeWaiterName }}</span>
+                </template>
+              </p>
+            </div>
           </div>
           <button type="button"
-            class="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-white transition-colors cursor-pointer"
             @click="isPaymentModalOpen = false">
             <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
           </button>
         </div>
 
-        <!-- Total Bill Card (បង្ហាញលុយខ្មែរ ៛ ធំចម្បង) -->
-        <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-1">
-          <span
-            class="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">ទឹកប្រាក់សរុបត្រូវទូទាត់</span>
-          <div class="flex items-baseline justify-center gap-2">
-            <span class="text-3xl sm:text-4xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-              {{ formatRiel(totalAmount) }} ៛
-            </span>
-          </div>
-          <div class="flex items-center justify-center gap-1.5">
-            <span class="text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">
-              ≈ ${{ totalAmount.toFixed(2) }} (អត្រាប្តូរប្រាក់ $1 = {{ currentExchangeRate.toLocaleString() }} ៛)
-            </span>
-            <button type="button"
-              class="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
-              title="ចុចដើម្បីកែប្រែអត្រាប្តូរប្រាក់" @click="openExchangeRateModal">
-              [កែប្រែ]
-            </button>
-          </div>
-          <p v-if="discount > 0" class="text-[11px] text-amber-600 font-semibold pt-1">
-            (បានចុះថ្លៃបញ្ចុះតម្លៃ -${{ discount.toFixed(2) }} រួចរាល់)
-          </p>
-        </div>
-
-        <!-- Payment Method Options (Dynamic Active Methods: Cash, ABA, ACLEDA, etc.) -->
-        <div class="space-y-1.5">
-          <div class="flex items-center justify-between">
-            <label class="text-xs font-bold text-gray-700 dark:text-gray-300 block">
-              ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់៖
-            </label>
-            <NuxtLink to="/admin/payments" target="_blank"
-              class="text-[10px] text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-0.5 font-bold">
-              <UIcon name="i-heroicons-cog-6-tooth" class="w-3 h-3" />
-              <span>កំណត់ធនាគារ</span>
-            </NuxtLink>
-          </div>
-
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button v-for="method in activePaymentMethods" :key="method.id" type="button"
-              class="p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group text-center"
-              :class="[
-                checkoutPaymentMethod === method.code
-                  ? 'border-primary-600 bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300 ring-2 ring-primary-500/30 font-bold shadow-xs'
-                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              ]" @click="checkoutPaymentMethod = method.code">
-              <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                :class="checkoutPaymentMethod === method.code ? 'bg-primary-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
-                <UIcon :name="method.code === 'cash'
-                  ? 'i-heroicons-banknotes'
-                  : method.code === 'card'
-                    ? 'i-heroicons-credit-card'
-                    : 'i-heroicons-qr-code'
-                  " class="w-4 h-4" />
-              </div>
-              <span class="text-xs font-bold truncate max-w-full">{{ method.name }}</span>
-              <span class="text-[9px] text-gray-400 font-mono uppercase">{{ method.code }}</span>
-            </button>
-
-            <!-- Mixed Payment Button Option -->
-            <button type="button"
-              class="p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group text-center"
-              :class="[
-                checkoutPaymentMethod === 'mixed'
-                  ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/30 font-bold shadow-xs'
-                  : 'border-gray-200 dark:border-gray-700/80 bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              ]" @click="checkoutPaymentMethod = 'mixed'">
-              <div class="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-                :class="checkoutPaymentMethod === 'mixed' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'">
-                <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4" />
-              </div>
-              <span class="text-xs font-bold truncate max-w-full">បង់ចម្រុះ</span>
-              <span class="text-[9px] text-gray-400 font-mono uppercase">CASH + ONLINE</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Conditional details for Cash (ប្រាក់ទទួល & ប្រាក់អាប់ ជាលុយរៀលជាចម្បង) -->
-        <div v-if="checkoutPaymentMethod === 'cash'"
-          class="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70 space-y-3.5">
-          <!-- 1. KHR Cash Input (Primary) -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between text-xs">
-              <span class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1">
-                <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-emerald-600" />
-                <span>១. ប្រាក់រៀលទទួលពីភ្ញៀវ (៛)៖</span>
+        <!-- Body: 2 Columns (Left: Full Bill Receipt Summary | Right: Payment Method & Cash/QR) -->
+        <div
+          class="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-gray-100 dark:divide-gray-800">
+          <!-- LEFT COLUMN: បុងគិតលុយទាំងអស់ (Full Bill Summary) -->
+          <div class="lg:col-span-5 p-4 sm:p-5 flex flex-col bg-gray-50/50 dark:bg-gray-950/30">
+            <div
+              class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-dashed border-gray-200 dark:border-gray-800">
+              <span class="text-xs font-extrabold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                <UIcon name="i-heroicons-receipt-percent" class="w-4 h-4 text-primary-600 dark:text-primary-400" />
+                <span>បញ្ជីមុខម្ហូបក្នុងបុង</span>
               </span>
-              <span class="text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
-                ត្រូវបង់៖ {{ totalAmountKHR.toLocaleString() }} ៛
+              <span class="text-[11px] font-mono font-semibold text-gray-400">
+                {{ currentSelectedTableName }}
               </span>
             </div>
 
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-base font-black text-emerald-600">៛</span>
-              <input v-model.number="checkoutReceivedCashKHR" type="number" step="500" min="0" placeholder="0"
-                class="w-full pl-8 pr-3 py-2 text-lg font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white" />
+            <!-- Scrollable Items List -->
+            <div class="flex-1 overflow-y-auto max-h-56 lg:max-h-[340px] pr-1 space-y-2">
+              <div v-for="(item, idx) in cart" :key="`${item.menuItemId}-${item.variantLabel || idx}`"
+                class="flex items-start justify-between gap-2 py-1.5 px-2.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800/80 text-xs">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      class="inline-flex items-center justify-center min-w-[22px] h-5 px-1 rounded-md bg-primary-50 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 font-mono font-black text-[11px]">
+                      {{ item.quantity }}x
+                    </span>
+                    <p class="font-bold text-gray-900 dark:text-white truncate">{{ item.name }}</p>
+                  </div>
+                  <div class="flex items-center gap-2 mt-0.5 pl-7 text-[10px] text-gray-400 font-mono">
+                    <span v-if="item.variantLabel" class="text-gray-500 dark:text-gray-400 font-sans font-semibold">
+                      {{ item.variantLabel }}
+                    </span>
+                    <span>${{ item.price.toFixed(2) }} / ឯកតា</span>
+                  </div>
+                  <p v-if="item.note"
+                    class="mt-0.5 pl-7 text-[10px] text-amber-600 dark:text-amber-400 italic truncate">
+                    * {{ item.note }}
+                  </p>
+                </div>
+                <div class="text-right shrink-0 font-mono">
+                  <p class="font-black text-gray-900 dark:text-white">${{ item.subtotal.toFixed(2) }}</p>
+                  <p class="text-[10px] text-gray-400">{{ formatRielPrice(item.subtotal) }} ៛</p>
+                </div>
+              </div>
             </div>
 
-            <!-- Quick KHR Suggestions -->
-            <div class="flex flex-wrap items-center gap-1.5 pt-1">
-              <button type="button"
-                class="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer font-mono"
-                @click="setQuickCashKHR(totalAmountKHR)">
-                {{ totalAmountKHR.toLocaleString() }} ៛ (គ្រប់)
-              </button>
-              <button v-for="b in quickCashKHRBanknotes" :key="b" type="button"
-                class="px-2 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer font-mono"
-                @click="setQuickCashKHR(b)">
-                {{ b.toLocaleString() }} ៛
-              </button>
+            <!-- Order Note Preview -->
+            <div v-if="orderNote.trim()"
+              class="mt-2.5 px-2.5 py-1.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-300">
+              <span class="font-bold">ចំណាំ៖</span> {{ orderNote }}
+            </div>
+
+            <!-- Totals Summary -->
+            <div class="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-gray-800 space-y-1.5 text-xs">
+              <div class="flex justify-between text-gray-500 dark:text-gray-400">
+                <span>សរុបដើម (Subtotal)</span>
+                <span class="font-mono font-bold text-gray-700 dark:text-gray-200">${{ subtotal.toFixed(2) }}</span>
+              </div>
+              <div v-if="discount > 0" class="flex justify-between text-amber-600 dark:text-amber-400 font-semibold">
+                <span>បញ្ចុះតម្លៃ (Discount)</span>
+                <span class="font-mono font-bold">-${{ discount.toFixed(2) }}</span>
+              </div>
+
+              <!-- Grand Total Box -->
+              <div
+                class="mt-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-2">
+                <div>
+                  <span
+                    class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider block">
+                    សរុបត្រូវទូទាត់
+                  </span>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">
+                      $1 = {{ currentExchangeRate.toLocaleString() }} ៛
+                    </span>
+                    <button type="button"
+                      class="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
+                      @click="openExchangeRateModal">
+                      [កែ]
+                    </button>
+                  </div>
+                </div>
+                <div class="text-right font-mono">
+                  <div class="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+                    {{ formatRiel(totalAmount) }} ៛
+                  </div>
+                  <div class="text-xs font-bold text-gray-700 dark:text-gray-300 mt-1">
+                    ≈ ${{ totalAmount.toFixed(2) }}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- 2. Optional USD Cash Input -->
-          <div class="space-y-1.5 pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
-            <div class="flex items-center justify-between text-xs">
-              <span class="font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                <span>២. ប្រាក់ដុល្លារ ($) បើភ្ញៀវហុចបន្ថែម ឬបង់ដុល្លារ៖</span>
-              </span>
-              <span class="text-gray-400 text-[10px] font-mono">($1 = 4,000 ៛)</span>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <div class="relative flex-1">
-                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
-                <input v-model.number="checkoutReceivedCashUSD" type="number" step="0.5" min="0" placeholder="0.00"
-                  class="w-full pl-7 pr-3 py-1.5 text-sm font-bold font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-gray-900 dark:text-white" />
+          <!-- RIGHT COLUMN: ជ្រើសរើសវិធីបង់ប្រាក់ (Compact Small Icons) & Payment Details -->
+          <div class="lg:col-span-7 p-4 sm:p-5 space-y-4">
+            <!-- Payment Method Selector (Compact Pills with Small Icons) -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-gray-700 dark:text-gray-300">
+                  ជ្រើសរើសវិធីបង់ប្រាក់៖
+                </label>
+                <NuxtLink to="/admin/payments" target="_blank"
+                  class="text-[11px] text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1 font-semibold">
+                  <UIcon name="i-heroicons-cog-6-tooth" class="w-3.5 h-3.5" />
+                  <span>កំណត់ធនាគារ</span>
+                </NuxtLink>
               </div>
 
-              <!-- Quick USD Buttons -->
-              <div class="flex items-center gap-1">
-                <button v-for="u in quickCashUSDBanknotes.slice(0, 3)" :key="u" type="button"
-                  class="px-2 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-gray-700 dark:text-gray-300 font-mono cursor-pointer"
-                  @click="setQuickCashUSD(u)">
-                  ${{ u }}
+              <div class="flex flex-wrap gap-1.5">
+                <button v-for="method in activePaymentMethods" :key="method.id" type="button"
+                  class="px-3 py-1.5 rounded-xl border inline-flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+                  :class="[
+                    checkoutPaymentMethod === method.code
+                      ? 'border-primary-600 bg-primary-600 text-white shadow-xs'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ]" @click="checkoutPaymentMethod = method.code">
+                  <UIcon :name="method.code === 'cash'
+                    ? 'i-heroicons-banknotes'
+                    : method.code === 'card'
+                      ? 'i-heroicons-credit-card'
+                      : 'i-heroicons-qr-code'
+                    " class="w-3.5 h-3.5 shrink-0" />
+                  <span>{{ method.name }}</span>
+                </button>
+
+                <!-- Mixed Payment Compact Pill -->
+                <button type="button"
+                  class="px-3 py-1.5 rounded-xl border inline-flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+                  :class="[
+                    checkoutPaymentMethod === 'mixed'
+                      ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ]" @click="checkoutPaymentMethod = 'mixed'">
+                  <UIcon name="i-heroicons-arrows-right-left" class="w-3.5 h-3.5 shrink-0" />
+                  <span>បង់ចម្រុះ</span>
+                </button>
+
+                <!-- Owner Meal (មេហូប - អត់គិតលុយ) Compact Pill -->
+                <button type="button"
+                  class="px-3 py-1.5 rounded-xl border inline-flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+                  :class="[
+                    checkoutPaymentMethod === 'owner_meal'
+                      ? 'border-amber-600 bg-amber-600 text-white shadow-xs'
+                      : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                  ]" @click="checkoutPaymentMethod = 'owner_meal'">
+                  <UIcon name="i-heroicons-gift" class="w-3.5 h-3.5 shrink-0" />
+                  <span>Boss</span>
                 </button>
               </div>
             </div>
-          </div>
 
-          <!-- Total Received & Change calculation display -->
-          <div
-            class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 space-y-2">
-            <div class="flex items-center justify-between text-xs font-mono">
-              <span class="text-gray-500">សរុបប្រាក់ទទួល (គិតជារៀល)៖</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛ (≈
-                ${{
-                  (totalCashReceivedInKHR / currentExchangeRate).toFixed(2) }})</span>
-            </div>
+            <!-- Conditional details for Cash (ប្រាក់ទទួល & ប្រាក់អាប់ ជាលុយរៀលជាចម្បង) -->
+            <div v-if="checkoutPaymentMethod === 'cash'"
+              class="p-4 rounded-2xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/80 dark:border-gray-700/70 space-y-3.5">
+              <!-- 1. KHR Cash Input (Primary) -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                    <UIcon name="i-heroicons-banknotes" class="w-4 h-4 text-emerald-600" />
+                    <span>១. ប្រាក់រៀលទទួលពីភ្ញៀវ (៛)៖</span>
+                  </span>
+                  <span class="text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+                    ត្រូវបង់៖ {{ totalAmountKHR.toLocaleString() }} ៛
+                  </span>
+                </div>
 
-            <!-- Missing Alert -->
-            <div v-if="totalCashReceivedInKHR < totalAmountKHR"
-              class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-rose-700 dark:text-rose-300 text-xs font-bold">
-              <span class="flex items-center gap-1">
-                <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" />
-                <span>នៅខ្វះទឹកប្រាក់៖</span>
-              </span>
-              <span class="font-mono">{{ (totalAmountKHR - totalCashReceivedInKHR).toLocaleString() }} ៛</span>
-            </div>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-base font-black text-emerald-600">៛</span>
+                  <input v-model.number="checkoutReceivedCashKHR" type="number" step="500" min="0" placeholder="0"
+                    class="w-full pl-8 pr-3 py-2 text-lg font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white" />
+                </div>
 
-            <!-- Change Return (Primary in Riel) -->
-            <div v-else
-              class="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-center justify-between">
-              <div>
-                <span class="text-xs font-bold text-amber-900 dark:text-amber-200 block">ប្រាក់អាប់ជូនភ្ញៀវ
-                  (លុយរៀល)៖</span>
-                <span class="text-[10px] text-amber-700 dark:text-amber-400 font-mono">≈ ${{
-                  checkoutChangeUSD.toFixed(2)
-                }}</span>
+                <!-- Quick KHR Suggestions -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                  <button type="button"
+                    class="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 transition-colors cursor-pointer font-mono"
+                    @click="setQuickCashKHR(totalAmountKHR)">
+                    {{ totalAmountKHR.toLocaleString() }} ៛ (គ្រប់)
+                  </button>
+                  <button v-for="b in quickCashKHRBanknotes" :key="b" type="button"
+                    class="px-2 py-1 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer font-mono"
+                    @click="setQuickCashKHR(b)">
+                    {{ b.toLocaleString() }} ៛
+                  </button>
+                </div>
               </div>
-              <span class="text-xl font-black font-mono text-amber-600 dark:text-amber-400">
-                {{ checkoutChangeKHR.toLocaleString() }} ៛
-              </span>
-            </div>
-          </div>
-        </div>
 
-        <!-- Conditional details for Mixed Payment (សាច់ប្រាក់ + Pay Online/KHQR) -->
-        <div v-else-if="checkoutPaymentMethod === 'mixed'"
-          class="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-4">
-          <div class="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-indigo-900/50">
-            <span class="text-xs font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-              <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4 text-indigo-600" />
-              <span>បែងចែកការបង់ប្រាក់ (សាច់ប្រាក់ + Pay Online)</span>
-            </span>
-            <span class="text-[11px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
-              សរុប៖ ${{ totalAmount.toFixed(2) }}
-            </span>
-          </div>
+              <!-- 2. Optional USD Cash Input -->
+              <div class="space-y-1.5 pt-2 border-t border-dashed border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between text-xs">
+                  <span class="font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                    <span>២. ប្រាក់ដុល្លារ ($) បើភ្ញៀវហុចបន្ថែម ឬបង់ដុល្លារ៖</span>
+                  </span>
+                  <span class="text-gray-400 text-[10px] font-mono">($1 = 4,000 ៛)</span>
+                </div>
 
-          <!-- Section 1: Cash Amount -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between text-xs">
-              <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5 text-emerald-600" />
-                <span>១. ចំនួនសាច់ប្រាក់ (Cash)៖</span>
-              </label>
-              <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedCashUSD) || 0) }} ៛</span>
-            </div>
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
-              <input v-model.number="mixedCashUSD" type="number" step="0.5" min="0" placeholder="0.00"
-                class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
-                @input="onMixedCashInput" />
-            </div>
-          </div>
+                <div class="flex items-center gap-2">
+                  <div class="relative flex-1">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
+                    <input v-model.number="checkoutReceivedCashUSD" type="number" step="0.5" min="0" placeholder="0.00"
+                      class="w-full pl-7 pr-3 py-1.5 text-sm font-bold font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 text-gray-900 dark:text-white" />
+                  </div>
 
-          <!-- Section 2: Online / Bank Amount & Bank Choice -->
-          <div class="space-y-2">
-            <div class="flex items-center justify-between text-xs">
-              <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5 text-sky-600" />
-                <span>២. ចំនួន Pay Online / KHQR៖</span>
-              </label>
-              <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedOnlineUSD) || 0) }} ៛</span>
+                  <!-- Quick USD Buttons -->
+                  <div class="flex items-center gap-1">
+                    <button v-for="u in quickCashUSDBanknotes.slice(0, 3)" :key="u" type="button"
+                      class="px-2 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 hover:border-emerald-500 text-gray-700 dark:text-gray-300 font-mono cursor-pointer"
+                      @click="setQuickCashUSD(u)">
+                      ${{ u }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Total Received & Change calculation display -->
+              <div
+                class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-700 space-y-2">
+                <div class="flex items-center justify-between text-xs font-mono">
+                  <span class="text-gray-500">សរុបប្រាក់ទទួល (គិតជារៀល)៖</span>
+                  <span class="font-bold text-gray-900 dark:text-white">{{ totalCashReceivedInKHR.toLocaleString() }} ៛
+                    (≈
+                    ${{
+                      (totalCashReceivedInKHR / currentExchangeRate).toFixed(2) }})</span>
+                </div>
+
+                <!-- Missing Alert -->
+                <div v-if="totalCashReceivedInKHR < totalAmountKHR"
+                  class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-rose-700 dark:text-rose-300 text-xs font-bold">
+                  <span class="flex items-center gap-1">
+                    <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" />
+                    <span>នៅខ្វះទឹកប្រាក់៖</span>
+                  </span>
+                  <span class="font-mono">{{ (totalAmountKHR - totalCashReceivedInKHR).toLocaleString() }} ៛</span>
+                </div>
+
+                <!-- Change Return (Primary in Riel) -->
+                <div v-else
+                  class="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold text-amber-900 dark:text-amber-200 block">ប្រាក់អាប់ជូនភ្ញៀវ
+                      (លុយរៀល)៖</span>
+                    <span class="text-[10px] text-amber-700 dark:text-amber-400 font-mono">≈ ${{
+                      checkoutChangeUSD.toFixed(2)
+                    }}</span>
+                  </div>
+                  <span class="text-xl font-black font-mono text-amber-600 dark:text-amber-400">
+                    {{ checkoutChangeKHR.toLocaleString() }} ៛
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <!-- Online Bank Selector -->
-            <div v-if="onlinePaymentMethods.length > 1" class="flex flex-wrap gap-1.5">
-              <button v-for="b in onlinePaymentMethods" :key="b.id" type="button"
-                class="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1"
-                :class="mixedOnlineBank === b.code
-                  ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'"
-                @click="mixedOnlineBank = b.code">
-                <UIcon name="i-heroicons-qr-code" class="w-3 h-3" />
-                <span>{{ b.name }}</span>
-              </button>
+            <!-- Conditional details for Mixed Payment (សាច់ប្រាក់ + Pay Online/KHQR) -->
+            <div v-else-if="checkoutPaymentMethod === 'mixed'"
+              class="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-900/60 space-y-4">
+              <div class="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-indigo-900/50">
+                <span class="text-xs font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                  <UIcon name="i-heroicons-arrows-right-left" class="w-4 h-4 text-indigo-600" />
+                  <span>បែងចែកការបង់ប្រាក់ (សាច់ប្រាក់ + Pay Online)</span>
+                </span>
+                <span class="text-[11px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                  សរុប៖ ${{ totalAmount.toFixed(2) }}
+                </span>
+              </div>
+
+              <!-- Section 1: Cash Amount -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-xs">
+                  <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                    <UIcon name="i-heroicons-banknotes" class="w-3.5 h-3.5 text-emerald-600" />
+                    <span>១. ចំនួនសាច់ប្រាក់ (Cash)៖</span>
+                  </label>
+                  <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedCashUSD) || 0) }}
+                    ៛</span>
+                </div>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
+                  <input v-model.number="mixedCashUSD" type="number" step="0.5" min="0" placeholder="0.00"
+                    class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
+                    @input="onMixedCashInput" />
+                </div>
+              </div>
+
+              <!-- Section 2: Online / Bank Amount & Bank Choice -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <label class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                    <UIcon name="i-heroicons-qr-code" class="w-3.5 h-3.5 text-sky-600" />
+                    <span>២. ចំនួន Pay Online / KHQR៖</span>
+                  </label>
+                  <span class="text-gray-400 text-[10px] font-mono">≈ {{ formatRiel(Number(mixedOnlineUSD) || 0) }}
+                    ៛</span>
+                </div>
+
+                <!-- Online Bank Selector -->
+                <div v-if="onlinePaymentMethods.length > 1" class="flex flex-wrap gap-1.5">
+                  <button v-for="b in onlinePaymentMethods" :key="b.id" type="button"
+                    class="px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1"
+                    :class="mixedOnlineBank === b.code
+                      ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                      : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'"
+                    @click="mixedOnlineBank = b.code">
+                    <UIcon name="i-heroicons-qr-code" class="w-3 h-3" />
+                    <span>{{ b.name }}</span>
+                  </button>
+                </div>
+
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
+                  <input v-model.number="mixedOnlineUSD" type="number" step="0.5" min="0" placeholder="0.00"
+                    class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
+                    @input="onMixedOnlineInput" />
+                </div>
+
+                <!-- QR Preview for Mixed Online Portion if available -->
+                <div v-if="currentSelectedMixedOnlineObj?.qrImageUrl && isMixedOnlineUSDValid">
+                  class="p-2.5 rounded-xl bg-white dark:bg-gray-900 border border-sky-200 dark:border-sky-900 flex
+                  items-center gap-3">
+                  <img :src="currentSelectedMixedOnlineObj.qrImageUrl" :alt="currentSelectedMixedOnlineObj.name"
+                    class="w-14 h-14 object-contain rounded-lg border border-gray-100 dark:border-gray-800 shrink-0" />
+                  <div class="min-w-0 flex-1 text-xs">
+                    <p class="font-bold text-sky-900 dark:text-sky-200 truncate">
+                      ស្កេន {{ currentSelectedMixedOnlineObj.name }} ចំនួន ${{ Number(mixedOnlineUSD).toFixed(2) }}
+                    </p>
+                    <p v-if="currentSelectedMixedOnlineObj.accountName || currentSelectedMixedOnlineObj.accountNumber"
+                      class="text-[11px] text-gray-500 truncate mt-0.5">
+                      {{ currentSelectedMixedOnlineObj.accountName }} <span
+                        v-if="currentSelectedMixedOnlineObj.accountNumber">•
+                        {{ currentSelectedMixedOnlineObj.accountNumber }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Calculation & Status Indicator -->
+              <div
+                class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2 text-xs">
+                <div class="flex items-center justify-between font-mono">
+                  <span class="text-gray-500">សរុបបានបង់ (Cash + Online)៖</span>
+                  <span class="font-bold text-gray-900 dark:text-white">${{ mixedTotalPaid.toFixed(2) }}</span>
+                </div>
+
+                <!-- Status Alert -->
+                <div v-if="mixedRemainingUSD > 0"
+                  class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-rose-700 dark:text-rose-300 font-bold">
+                  <span class="flex items-center gap-1">
+                    <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" />
+                    <span>នៅខ្វះទឹកប្រាក់៖</span>
+                  </span>
+                  <span class="font-mono">${{ mixedRemainingUSD.toFixed(2) }}</span>
+                </div>
+
+                <div v-else-if="mixedChangeUSD > 0"
+                  class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 flex items-center justify-between text-amber-700 dark:text-amber-300 font-bold">
+                  <span class="flex items-center gap-1">
+                    <UIcon name="i-heroicons-banknotes" class="w-4 h-4 shrink-0" />
+                    <span>ប្រាក់អាប់ជូនភ្ញៀវ (ពីសាច់ប្រាក់)៖</span>
+                  </span>
+                  <span class="font-mono">${{ mixedChangeUSD.toFixed(2) }} (≈ {{ formatRiel(mixedChangeUSD) }} ៛)</span>
+                </div>
+
+                <div v-else
+                  class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 flex items-center justify-between text-emerald-700 dark:text-emerald-300 font-bold">
+                  <span class="flex items-center gap-1">
+                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4 shrink-0" />
+                    <span>ទូទាត់គ្រប់ចំនួន ១០០%</span>
+                  </span>
+                  <span class="font-mono font-black">${{ mixedTotalPaid.toFixed(2) }}</span>
+                </div>
+              </div>
+
+              <!-- Section 4: Extra Note for Mixed Payment -->
+              <div class="space-y-1 text-xs">
+                <label class="font-medium text-gray-500 dark:text-gray-400 block">
+                  ចំណាំបន្ថែមលើការបង់ចម្រុះ (ស្រេចចិត្ត)៖
+                </label>
+                <input v-model="mixedNoteInput" type="text" placeholder="ឧ. ភ្ញៀវបង់លុយសុទ្ធ $10 នៅសល់ $15 វេរ ABA"
+                  class="w-full px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200" />
+              </div>
             </div>
 
-            <div class="relative">
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-gray-400">$</span>
-              <input v-model.number="mixedOnlineUSD" type="number" step="0.5" min="0" placeholder="0.00"
-                class="w-full pl-8 pr-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-white"
-                @input="onMixedOnlineInput" />
-            </div>
-
-            <!-- QR Preview for Mixed Online Portion if available -->
-            <div v-if="currentSelectedMixedOnlineObj?.qrImageUrl && mixedOnlineUSD > 0"
-              class="p-2.5 rounded-xl bg-white dark:bg-gray-900 border border-sky-200 dark:border-sky-900 flex items-center gap-3">
-              <img :src="currentSelectedMixedOnlineObj.qrImageUrl" :alt="currentSelectedMixedOnlineObj.name"
-                class="w-14 h-14 object-contain rounded-lg border border-gray-100 dark:border-gray-800 shrink-0" />
-              <div class="min-w-0 flex-1 text-xs">
-                <p class="font-bold text-sky-900 dark:text-sky-200 truncate">
-                  ស្កេន {{ currentSelectedMixedOnlineObj.name }} ចំនួន ${{ Number(mixedOnlineUSD).toFixed(2) }}
+            <!-- Conditional details for Card -->
+            <div v-else-if="checkoutPaymentMethod === 'card'"
+              class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+                <UIcon name="i-heroicons-credit-card" class="w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-bold text-blue-900 dark:text-blue-200">ទូទាត់តាមកាតធនាគារ</p>
+                <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
+                  សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន <strong
+                    class="font-mono text-sm text-blue-950 dark:text-blue-100">{{
+                      formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }}) មុននឹងចុចបញ្ជាក់។
                 </p>
-                <p v-if="currentSelectedMixedOnlineObj.accountName || currentSelectedMixedOnlineObj.accountNumber"
-                  class="text-[11px] text-gray-500 truncate mt-0.5">
-                  {{ currentSelectedMixedOnlineObj.accountName }} <span
-                    v-if="currentSelectedMixedOnlineObj.accountNumber">•
-                    {{ currentSelectedMixedOnlineObj.accountNumber }}</span>
+              </div>
+            </div>
+
+            <!-- Conditional details for Owner Meal (មេហូប - អត់គិតលុយ) -->
+            <div v-else-if="checkoutPaymentMethod === 'owner_meal'"
+              class="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/60 flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                <UIcon name="i-heroicons-gift" class="w-6 h-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-bold text-amber-900 dark:text-amber-200">មេហូប (អត់គិតលុយ • សម្រាប់ Report)</p>
+                <p class="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5 leading-relaxed">
+                  វិក្កយបត្រនេះមិនគិតប្រាក់ចូលចំណូលហាងទេ ប៉ុន្តែនឹងកត់ត្រាតម្លៃ
+                  <strong class="font-mono">{{ formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }})
+                  ទៅក្នុងរបាយការណ៍ប្រចាំថ្ងៃ។
                 </p>
               </div>
             </div>
-          </div>
 
-          <!-- Section 3: Calculation & Status Indicator -->
-          <div
-            class="p-3 rounded-xl bg-white dark:bg-gray-900 border border-indigo-200/80 dark:border-indigo-900/60 space-y-2 text-xs">
-            <div class="flex items-center justify-between font-mono">
-              <span class="text-gray-500">សរុបបានបង់ (Cash + Online)៖</span>
-              <span class="font-bold text-gray-900 dark:text-white">${{ mixedTotalPaid.toFixed(2) }}</span>
-            </div>
-
-            <!-- Status Alert -->
-            <div v-if="mixedRemainingUSD > 0"
-              class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 flex items-center justify-between text-rose-700 dark:text-rose-300 font-bold">
-              <span class="flex items-center gap-1">
-                <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 shrink-0" />
-                <span>នៅខ្វះទឹកប្រាក់៖</span>
-              </span>
-              <span class="font-mono">${{ mixedRemainingUSD.toFixed(2) }}</span>
-            </div>
-
-            <div v-else-if="mixedChangeUSD > 0"
-              class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 flex items-center justify-between text-amber-700 dark:text-amber-300 font-bold">
-              <span class="flex items-center gap-1">
-                <UIcon name="i-heroicons-banknotes" class="w-4 h-4 shrink-0" />
-                <span>ប្រាក់អាប់ជូនភ្ញៀវ (ពីសាច់ប្រាក់)៖</span>
-              </span>
-              <span class="font-mono">${{ mixedChangeUSD.toFixed(2) }} (≈ {{ formatRiel(mixedChangeUSD) }} ៛)</span>
-            </div>
-
+            <!-- Conditional details for Bank / KHQR (ABA, ACLEDA, Wing...) -->
             <div v-else
-              class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 flex items-center justify-between text-emerald-700 dark:text-emerald-300 font-bold">
-              <span class="flex items-center gap-1">
-                <UIcon name="i-heroicons-check-circle" class="w-4 h-4 shrink-0" />
-                <span>ទូទាត់គ្រប់ចំនួន ១០០%</span>
-              </span>
-              <span class="font-mono font-black">${{ mixedTotalPaid.toFixed(2) }}</span>
-            </div>
-          </div>
+              class="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 space-y-3">
+              <!-- QR Code Preview if uploaded -->
+              <div v-if="currentSelectedPaymentMethodObj?.qrImageUrl" class="text-center space-y-2">
+                <div class="inline-block p-2 bg-white rounded-2xl border border-gray-200 shadow-xs">
+                  <img :src="currentSelectedPaymentMethodObj.qrImageUrl" :alt="currentSelectedPaymentMethodObj.name"
+                    class="max-h-48 w-auto object-contain rounded-xl mx-auto" />
+                </div>
+                <p class="text-xs font-bold text-sky-800 dark:text-sky-300">
+                  ស្កេនទូទាត់ទឹកប្រាក់ <span class="font-mono text-base font-black text-sky-950 dark:text-sky-100">{{
+                    formatRiel(totalAmount) }} ៛</span> (≈ ${{ totalAmount.toFixed(2) }})
+                </p>
+              </div>
 
-          <!-- Section 4: Extra Note for Mixed Payment -->
-          <div class="space-y-1 text-xs">
-            <label class="font-medium text-gray-500 dark:text-gray-400 block">
-              ចំណាំបន្ថែមលើការបង់ចម្រុះ (ស្រេចចិត្ត)៖
-            </label>
-            <input v-model="mixedNoteInput" type="text" placeholder="ឧ. ភ្ញៀវបង់លុយសុទ្ធ $10 នៅសល់ $15 វេរ ABA"
-              class="w-full px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 text-gray-800 dark:text-gray-200" />
-          </div>
-        </div>
-
-        <!-- Conditional details for Card -->
-        <div v-else-if="checkoutPaymentMethod === 'card'"
-          class="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-            <UIcon name="i-heroicons-credit-card" class="w-6 h-6" />
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="text-xs font-bold text-blue-900 dark:text-blue-200">ទូទាត់តាមកាតធនាគារ</p>
-            <p class="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5 leading-relaxed">
-              សូមឆូតកាតតាមម៉ាស៊ីន POS Terminal ចំនួន <strong
-                class="font-mono text-sm text-blue-950 dark:text-blue-100">{{
-                  formatRiel(totalAmount) }} ៛</strong> (≈ ${{ totalAmount.toFixed(2) }}) មុននឹងចុចបញ្ជាក់។
-            </p>
-          </div>
-        </div>
-
-        <!-- Conditional details for Bank / KHQR (ABA, ACLEDA, Wing...) -->
-        <div v-else
-          class="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-900/60 space-y-3">
-          <!-- QR Code Preview if uploaded -->
-          <div v-if="currentSelectedPaymentMethodObj?.qrImageUrl" class="text-center space-y-2">
-            <div class="inline-block p-2 bg-white rounded-2xl border border-gray-200 shadow-xs">
-              <img :src="currentSelectedPaymentMethodObj.qrImageUrl" :alt="currentSelectedPaymentMethodObj.name"
-                class="max-h-48 w-auto object-contain rounded-xl mx-auto" />
-            </div>
-            <p class="text-xs font-bold text-sky-800 dark:text-sky-300">
-              ស្កេនទូទាត់ទឹកប្រាក់ <span class="font-mono text-base font-black text-sky-950 dark:text-sky-100">{{
-                formatRiel(totalAmount) }} ៛</span> (≈ ${{ totalAmount.toFixed(2) }})
-            </p>
-          </div>
-
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0">
-              <UIcon name="i-heroicons-qr-code" class="w-6 h-6" />
-            </div>
-            <div class="min-w-0 flex-1 text-xs">
-              <p class="font-bold text-sky-900 dark:text-sky-200">
-                ទូទាត់តាម {{ currentSelectedPaymentMethodObj?.name || 'KHQR' }}
-              </p>
-              <div v-if="currentSelectedPaymentMethodObj?.accountName || currentSelectedPaymentMethodObj?.accountNumber"
-                class="text-[11px] text-sky-700 dark:text-sky-300 mt-0.5 font-medium">
-                <span v-if="currentSelectedPaymentMethodObj?.accountName">ឈ្មោះ៖ <strong>{{
-                  currentSelectedPaymentMethodObj.accountName }}</strong></span>
-                <span v-if="currentSelectedPaymentMethodObj?.accountNumber" class="ml-2 font-mono">លេខ៖ <strong>{{
-                  currentSelectedPaymentMethodObj.accountNumber }}</strong></span>
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0">
+                  <UIcon name="i-heroicons-qr-code" class="w-6 h-6" />
+                </div>
+                <div class="min-w-0 flex-1 text-xs">
+                  <p class="font-bold text-sky-900 dark:text-sky-200">
+                    ទូទាត់តាម {{ currentSelectedPaymentMethodObj?.name || 'KHQR' }}
+                  </p>
+                  <div
+                    v-if="currentSelectedPaymentMethodObj?.accountName || currentSelectedPaymentMethodObj?.accountNumber"
+                    class="text-[11px] text-sky-700 dark:text-sky-300 mt-0.5 font-medium">
+                    <span v-if="currentSelectedPaymentMethodObj?.accountName">ឈ្មោះ៖ <strong>{{
+                      currentSelectedPaymentMethodObj.accountName }}</strong></span>
+                    <span v-if="currentSelectedPaymentMethodObj?.accountNumber" class="ml-2 font-mono">លេខ៖ <strong>{{
+                      currentSelectedPaymentMethodObj.accountNumber }}</strong></span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Modal Actions -->
-        <div class="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <!-- Modal Actions Footer -->
+        <div
+          class="flex items-center gap-2.5 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 shrink-0 bg-gray-50/60 dark:bg-gray-900">
           <button type="button"
-            class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            class="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
             @click="isPaymentModalOpen = false">
             បោះបង់
           </button>
           <button type="button"
             :disabled="isSubmitting || (checkoutPaymentMethod === 'cash' && totalCashReceivedInKHR < totalAmountKHR) || (checkoutPaymentMethod === 'mixed' && mixedTotalPaid < totalAmount)"
-            class="flex-2 py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+            class="flex-2 py-2.5 px-4 rounded-xl text-xs font-black text-white shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
             :class="checkoutPaymentMethod === 'cash' ? 'bg-emerald-600 hover:bg-emerald-500' : (checkoutPaymentMethod === 'mixed' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-primary-600 hover:bg-primary-500')"
             @click="executeCheckout">
             <UIcon v-if="isSubmitting" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
@@ -2312,6 +2563,160 @@ function handlePrint() {
             <UIcon v-else name="i-heroicons-check" class="w-4 h-4" />
             <span>រក្សាទុកអត្រាថ្មី ({{ tempExchangeRateInput?.toLocaleString() || 4000 }} ៛)</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 8: CASH LEDGER MODAL (លុយគេជំពាក់ / លុយជំពាក់គេ / លុយសងគេ / មេហូប) -->
+    <div v-if="isLedgerModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+      @click.self="isLedgerModalOpen = false">
+      <div
+        class="relative w-full max-w-xl bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+          <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white flex items-center gap-2">
+              <UIcon name="i-heroicons-book-open" class="w-5 h-5 text-amber-500" />
+              <span>កត់ត្រាបំណុល & មេហូបប្រចាំថ្ងៃ</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              លុយគេជំពាក់ • លុយជំពាក់គេ • លុយសងគេ • មេហូប (អត់គិតលុយ)
+            </p>
+          </div>
+          <button type="button"
+            class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="isLedgerModalOpen = false">
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 space-y-5">
+          <!-- Type Selector Pills -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <button type="button"
+              class="py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center" :class="ledgerType === 'receivable'
+                ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="ledgerType = 'receivable'">
+              លុយគេជំពាក់
+            </button>
+            <button type="button"
+              class="py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center" :class="ledgerType === 'payable'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="ledgerType = 'payable'">
+              លុយជំពាក់គេ
+            </button>
+            <button type="button"
+              class="py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center" :class="ledgerType === 'repayment'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="ledgerType = 'repayment'">
+              លុយសងគេ
+            </button>
+            <button type="button"
+              class="py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center" :class="ledgerType === 'owner_meal'
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'"
+              @click="ledgerType = 'owner_meal'">
+              Boss
+            </button>
+          </div>
+
+          <!-- Form -->
+          <form
+            class="space-y-3 bg-gray-50 dark:bg-gray-800/40 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-700/70"
+            @submit.prevent="handleCreateLedgerEntry">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  {{ ledgerType === 'owner_meal' ? 'ឈ្មោះអ្នកទទួល / មេហូប' : 'ឈ្មោះអតិថិជន / ម្ចាស់បំណុល' }}
+                </label>
+                <input v-model="ledgerPersonName" type="text"
+                  :placeholder="ledgerType === 'owner_meal' ? 'ឧ. មេ / បុគ្គលិក...' : 'ឧ. បងសុខា / អ្នកផ្គត់ផ្គង់...'"
+                  class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500" />
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  ចំណាំ / មុខម្ហូប
+                </label>
+                <input v-model="ledgerNote" type="text" placeholder="ឧ. ជំពាក់ថ្លៃម្ហូប / ទិញបន្លែ..."
+                  class="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  ចំនួនទឹកប្រាក់ (រៀល ៛) *
+                </label>
+                <input v-model.number="ledgerAmountKHR" type="number" step="500" min="0" placeholder="0"
+                  class="w-full px-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                  @input="onLedgerKHRInput" />
+              </div>
+              <div class="space-y-1">
+                <label class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  ឬ ដុល្លារ ($)
+                </label>
+                <input v-model.number="ledgerAmountUSD" type="number" step="0.25" min="0" placeholder="0.00"
+                  class="w-full px-3 py-2 text-sm font-black font-mono rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                  @input="onLedgerUSDInput" />
+              </div>
+            </div>
+
+            <button type="submit" :disabled="isSubmittingLedger"
+              class="w-full py-2.5 rounded-xl text-xs font-black bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50">
+              <UIcon v-if="isSubmittingLedger" name="i-lucide-loader-2" class="w-4 h-4 animate-spin" />
+              <UIcon v-else name="i-heroicons-plus-circle" class="w-4 h-4" />
+              <span>រក្សាទុក ({{ getLedgerTypeLabel(ledgerType) }})</span>
+            </button>
+          </form>
+
+          <!-- Today's Ledger Entries List -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold text-gray-700 dark:text-gray-300">
+              កំណត់ត្រាថ្ងៃនេះ ({{ todayLedgerList.length }})
+            </h4>
+            <div v-if="todayLedgerList.length > 0"
+              class="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
+              <div v-for="entry in todayLedgerList" :key="entry.id"
+                class="p-3 flex items-center justify-between gap-3 bg-white dark:bg-gray-900 text-xs">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold" :class="entry.type === 'receivable'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                      : entry.type === 'payable'
+                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                        : entry.type === 'repayment'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'">
+                      {{ getLedgerTypeLabel(entry.type) }}
+                    </span>
+                    <span v-if="entry.personName" class="font-bold text-gray-900 dark:text-white truncate">
+                      {{ entry.personName }}
+                    </span>
+                  </div>
+                  <p v-if="entry.note" class="text-[11px] text-gray-500 mt-0.5 truncate">{{ entry.note }}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <div class="text-right font-mono">
+                    <p class="font-black text-gray-900 dark:text-white">{{ entry.amountKHR.toLocaleString() }} ៛</p>
+                    <p class="text-[10px] text-gray-400">${{ entry.amountUSD.toFixed(2) }}</p>
+                  </div>
+                  <button type="button"
+                    class="p-1.5 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                    @click="handleDeleteLedgerEntry(entry.id)">
+                    <UIcon name="i-heroicons-trash" class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else
+              class="text-center py-6 text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
+              មិនទាន់មានកំណត់ត្រាបំណុល ឬមេហូបនៅថ្ងៃនេះទេ
+            </div>
+          </div>
         </div>
       </div>
     </div>

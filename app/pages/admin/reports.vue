@@ -8,6 +8,7 @@ definePageMeta({
 
 const todayStr = new Date().toISOString().slice(0, 10);
 const selectedDate = ref(todayStr);
+const selectedOrderDetail = ref<Order | null>(null);
 
 // Fetch Daily Report
 const { data: reportData, status: reportStatus, refresh: refreshReport } = await useApiData<DailyReport>(
@@ -20,23 +21,34 @@ const { data: reportData, status: reportStatus, refresh: refreshReport } = await
 
 const report = computed(() => reportData.value || {
   date: selectedDate.value,
+  exchangeRate: 4000,
   totalOrders: 0,
   totalRevenueUSD: 0,
   totalRevenueKHR: 0,
+  unpaidOrdersUSD: 0,
+  unpaidOrdersKHR: 0,
+  receivableUSD: 0,
+  receivableKHR: 0,
+  payableUSD: 0,
+  payableKHR: 0,
+  repaymentUSD: 0,
+  repaymentKHR: 0,
+  ownerMealCount: 0,
+  ownerMealUSD: 0,
+  ownerMealKHR: 0,
   paymentBreakdown: { cashUSD: 0, khqrUSD: 0, cardUSD: 0 },
+  paymentMethodBreakdown: [],
   topSellingItems: [],
+  categoryBreakdown: [],
+  ledgerEntries: [],
   orders: [],
 });
 
 const isLoading = computed(() => reportStatus.value === 'pending');
 
-const avgTicket = computed(() => {
-  if (!report.value.totalOrders) return '0.00';
-  return (report.value.totalRevenueUSD / report.value.totalOrders).toFixed(2);
-});
-
 function formatRiel(usd: number): string {
-  return Math.round(usd * 4000).toLocaleString('en-US');
+  const rate = report.value.exchangeRate || 4000;
+  return Math.round(usd * rate).toLocaleString('en-US');
 }
 
 function handlePrint() {
@@ -56,7 +68,8 @@ function setDatePreset(type: 'today' | 'yesterday') {
 <template>
   <div class="space-y-6 max-w-7xl mx-auto pb-12">
     <!-- Header with Date Filter and Print Button -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200 dark:border-gray-800">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200 dark:border-gray-800">
       <div>
         <h1 class="text-2xl font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-2.5">
           <UIcon name="i-heroicons-chart-bar-square" class="w-7 h-7 text-primary-600 dark:text-primary-400" />
@@ -69,27 +82,20 @@ function setDatePreset(type: 'today' | 'yesterday') {
 
       <!-- Action & Date Picker -->
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-1 shadow-2xs">
-          <button
-            type="button"
-            class="px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+        <div
+          class="flex items-center gap-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-1 shadow-2xs">
+          <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             :class="selectedDate === todayStr ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'"
-            @click="setDatePreset('today')"
-          >
+            @click="setDatePreset('today')">
             ថ្ងៃនេះ
           </button>
-          <input
-            v-model="selectedDate"
-            type="date"
-            class="px-2 py-1 text-xs font-medium bg-transparent text-gray-700 dark:text-gray-300 focus:outline-hidden"
-          />
+          <input v-model="selectedDate" type="date"
+            class="px-2 py-1 text-xs font-medium bg-transparent text-gray-700 dark:text-gray-300 focus:outline-hidden" />
         </div>
 
-        <button
-          type="button"
+        <button type="button"
           class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 text-white shadow-sm transition-all cursor-pointer"
-          @click="handlePrint"
-        >
+          @click="handlePrint">
           <UIcon name="i-heroicons-printer" class="w-4 h-4" />
           <span>ព្រីនរបាយការណ៍</span>
         </button>
@@ -98,187 +104,151 @@ function setDatePreset(type: 'today' | 'yesterday') {
 
     <!-- Printable Report Container -->
     <div id="daily-report-printable" class="space-y-6">
-      <!-- 4 Key Metric Cards -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- 1. Total USD -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
-          <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">ចំណូលសរុប (USD)</span>
-            <div class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600">
-              <UIcon name="i-heroicons-currency-dollar" class="w-5 h-5" />
-            </div>
-          </div>
-          <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-            ${{ report.totalRevenueUSD.toFixed(2) }}
-          </p>
-          <p class="text-[11px] text-gray-400 font-mono">
-            ចំណូលសរុបប្រចាំថ្ងៃជាដុល្លារ
-          </p>
-        </div>
-
-        <!-- 2. Total KHR -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
-          <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">ចំណូលសរុប (រៀល)</span>
-            <div class="p-1.5 rounded-lg bg-primary-50 dark:bg-primary-950/50 text-primary-600">
-              <UIcon name="i-heroicons-banknotes" class="w-5 h-5" />
-            </div>
-          </div>
-          <p class="text-2xl font-black text-primary-600 dark:text-primary-400 font-mono">
-            {{ report.totalRevenueKHR.toLocaleString('en-US') }} ៛
-          </p>
-          <p class="text-[11px] text-gray-400 font-mono">
-            គិតជាប្រាក់រៀល (~4,100)
-          </p>
-        </div>
-
-        <!-- 3. Total Orders -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
-          <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">Total Orders (វិក្កយបត្រ)</span>
-            <div class="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/50 text-blue-600">
-              <UIcon name="i-heroicons-receipt-percent" class="w-5 h-5" />
-            </div>
-          </div>
-          <p class="text-2xl font-black text-gray-900 dark:text-white font-mono">
-            {{ report.totalOrders }}
-          </p>
-          <p class="text-[11px] text-gray-400 font-mono">
-            ចំនួនតុ / បុងដែលបានគិតលុយ
-          </p>
-        </div>
-
-        <!-- 4. Avg Ticket -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200/80 dark:border-gray-800 shadow-2xs space-y-2">
-          <div class="flex items-center justify-between text-gray-500">
-            <span class="text-xs font-semibold">Avg Ticket (មធ្យមភាគ)</span>
-            <div class="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600">
-              <UIcon name="i-heroicons-scale" class="w-5 h-5" />
-            </div>
-          </div>
-          <p class="text-2xl font-black text-gray-900 dark:text-white font-mono">
-            ${{ avgTicket }}
-          </p>
-          <p class="text-[11px] text-gray-400 font-mono">
-            តម្លៃមធ្យមក្នុងមួយតុ
-          </p>
-        </div>
-      </div>
-
-      <!-- Payment Breakdown Cards -->
-      <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-3">
-        <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <UIcon name="i-heroicons-credit-card" class="w-4 h-4 text-primary-500" />
-          <span>ការទូទាត់តាមប្រភេទ</span>
-        </h2>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div class="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 flex items-center justify-center font-bold">
-                💵
-              </div>
-              <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">សាច់ប្រាក់</p>
-                <p class="text-[10px] text-gray-400">ប្រាក់ដុល្លារ & រៀល</p>
-              </div>
-            </div>
-            <span class="text-base font-black font-mono text-gray-900 dark:text-white">
-              ${{ report.paymentBreakdown.cashUSD.toFixed(2) }}
+      <!-- Bank / Payment Breakdown (in Riel) & Debts Summary -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Bank & Cash Breakdown (2 Columns) -->
+        <div
+          class="lg:col-span-2 p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <UIcon name="i-heroicons-building-library" class="w-4 h-4 text-primary-500" />
+              <span>ចំណូលតាមសាច់ប្រាក់ & ធនាគារ (ប្រាក់រៀល)</span>
+            </h2>
+            <span class="text-[11px] text-gray-400 font-mono">
+              $1 = {{ (report.exchangeRate || 4000).toLocaleString('en-US') }} ៛
             </span>
           </div>
 
-          <div class="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/70 text-rose-600 flex items-center justify-center font-bold">
-                📱
+          <div v-if="(report.paymentMethodBreakdown || []).length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div v-for="pm in report.paymentMethodBreakdown" :key="pm.code"
+              class="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/70 dark:border-gray-700/60 flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <p class="text-xs font-bold text-gray-900 dark:text-white truncate">{{ pm.name }}</p>
+                <p class="text-[10px] text-gray-400 font-mono">{{ pm.totalOrders }} បុង • ${{ pm.totalUSD.toFixed(2) }}</p>
               </div>
-              <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">KHQR</p>
-                <p class="text-[10px] text-gray-400">Bakong / ABA / Acleda</p>
-              </div>
+              <span class="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                {{ pm.totalKHR.toLocaleString('en-US') }} ៛
+              </span>
             </div>
-            <span class="text-base font-black font-mono text-rose-600 dark:text-rose-400">
-              ${{ report.paymentBreakdown.khqrUSD.toFixed(2) }}
-            </span>
           </div>
 
-          <div class="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200/60 dark:border-gray-700/60 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-600 flex items-center justify-center font-bold">
-                💳
-              </div>
+          <div v-else class="text-center py-4 text-xs text-gray-400">
+            មិនទាន់មានទិន្នន័យទូទាត់តាមធនាគារ ឬសាច់ប្រាក់នៅថ្ងៃនេះទេ
+          </div>
+        </div>
+
+        <!-- Receivable (គេជំពាក់), Payable (ជំពាក់គេ), Repayment (សងគេ), Owner Meal (មេហូប) -->
+        <div
+          class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-3">
+          <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <UIcon name="i-heroicons-scale" class="w-4 h-4 text-amber-500" />
+            <span>សង្ខេបបំណុល & មេហូប (រៀល)</span>
+          </h2>
+
+          <div class="space-y-2">
+            <div
+              class="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/50 flex items-center justify-between gap-2">
               <div>
-                <p class="text-xs font-bold text-gray-900 dark:text-white">កាតធនាគារ</p>
-                <p class="text-[10px] text-gray-400">Visa / Mastercard</p>
+                <p class="text-xs font-bold text-amber-900 dark:text-amber-200">លុយគេជំពាក់ (មិនទាន់បង់)</p>
+                <p class="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-mono">
+                  ≈ ${{ (report.receivableUSD || 0).toFixed(2) }}
+                </p>
               </div>
+              <span class="text-sm font-black font-mono text-amber-600 dark:text-amber-400 shrink-0">
+                {{ (report.receivableKHR || 0).toLocaleString('en-US') }} ៛
+              </span>
             </div>
-            <span class="text-base font-black font-mono text-blue-600 dark:text-blue-400">
-              ${{ report.paymentBreakdown.cardUSD.toFixed(2) }}
-            </span>
+
+            <div
+              class="p-2.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/70 dark:border-rose-900/50 flex items-center justify-between gap-2">
+              <div>
+                <p class="text-xs font-bold text-rose-900 dark:text-rose-200">លុយជំពាក់គេ</p>
+                <p class="text-[10px] text-rose-700/80 dark:text-rose-400/80 font-mono">
+                  ≈ ${{ (report.payableUSD || 0).toFixed(2) }}
+                </p>
+              </div>
+              <span class="text-sm font-black font-mono text-rose-600 dark:text-rose-400 shrink-0">
+                {{ (report.payableKHR || 0).toLocaleString('en-US') }} ៛
+              </span>
+            </div>
+
+            <div
+              class="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/50 flex items-center justify-between gap-2">
+              <div>
+                <p class="text-xs font-bold text-emerald-900 dark:text-emerald-200">លុយសងគេ</p>
+                <p class="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 font-mono">
+                  ≈ ${{ (report.repaymentUSD || 0).toFixed(2) }}
+                </p>
+              </div>
+              <span class="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                {{ (report.repaymentKHR || 0).toLocaleString('en-US') }} ៛
+              </span>
+            </div>
+
+            <div
+              class="p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 flex items-center justify-between gap-2">
+              <div>
+                <p class="text-xs font-bold text-indigo-900 dark:text-indigo-200">មេហូប (អត់គិតលុយ)</p>
+                <p class="text-[10px] text-indigo-700/80 dark:text-indigo-400/80 font-mono">
+                  {{ report.ownerMealCount || 0 }} លើក • សម្រាប់ Report
+                </p>
+              </div>
+              <span class="text-sm font-black font-mono text-indigo-600 dark:text-indigo-400 shrink-0">
+                {{ (report.ownerMealKHR || 0).toLocaleString('en-US') }} ៛
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Top Selling Items & Daily Orders Table (2 Columns) -->
+      <!-- Sales by Category & Daily Orders Table (2 Columns) -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- LEFT: Top Selling Items (1 Column) -->
-        <div class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
+        <!-- LEFT: Sales by Category (1 Column) -->
+        <div
+          class="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
           <div>
             <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <UIcon name="i-heroicons-fire" class="w-4 h-4 text-amber-500" />
-              <span>មុខម្ហូបលក់ដាច់បំផុតទាំង ១០</span>
+              <UIcon name="i-heroicons-rectangle-stack" class="w-4 h-4 text-primary-500" />
+              <span>ចំណូលតាមប្រភេទមុខម្ហូប</span>
             </h2>
-            <p class="text-xs text-gray-500">តម្រៀបតាមចំនួនចាន/កំប៉ុងដែលបានលក់</p>
+            <p class="text-xs text-gray-500">សរុបចំនួនលក់ និងទឹកប្រាក់តាមប្រភេទនីមួយៗ</p>
           </div>
 
-          <div v-if="report.topSellingItems.length > 0" class="divide-y divide-gray-100 dark:divide-gray-800">
-            <div
-              v-for="(item, idx) in report.topSellingItems"
-              :key="idx"
-              class="py-2.5 flex items-center justify-between text-xs"
-            >
+          <div v-if="(report.categoryBreakdown || []).length > 0" class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-for="(cat, idx) in report.categoryBreakdown" :key="cat.categoryId || idx"
+              class="py-3 flex items-center justify-between gap-3 text-xs">
               <div class="flex items-center gap-2.5 min-w-0">
                 <span
-                  class="w-5 h-5 rounded-md flex items-center justify-center font-black text-[11px] shrink-0"
-                  :class="[
-                    idx === 0
-                      ? 'bg-amber-400 text-gray-950 font-bold'
-                      : idx === 1
-                      ? 'bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white'
-                      : idx === 2
-                      ? 'bg-amber-700/60 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500',
-                  ]"
-                >
+                  class="w-6 h-6 rounded-lg flex items-center justify-center font-black text-[11px] shrink-0 bg-primary-50 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400">
                   {{ idx + 1 }}
                 </span>
                 <div class="min-w-0">
-                  <p class="font-bold text-gray-900 dark:text-white truncate">{{ item.name }}</p>
-                  <p v-if="item.variantLabel" class="text-[10px] text-gray-400 font-mono">
-                    {{ item.variantLabel }}
+                  <p class="font-bold text-gray-900 dark:text-white truncate">{{ cat.categoryName }}</p>
+                  <p class="text-[11px] text-gray-400 font-mono">
+                    លក់បាន {{ cat.totalQuantity }} មុខ
                   </p>
                 </div>
               </div>
 
-              <div class="text-right shrink-0">
-                <span class="font-bold text-primary-600 dark:text-primary-400 font-mono">
-                  x{{ item.totalQuantity }}
+              <div class="text-right shrink-0 font-mono">
+                <span class="font-black text-emerald-600 dark:text-emerald-400 text-sm block">
+                  {{ cat.totalRevenueKHR.toLocaleString('en-US') }} ៛
                 </span>
-                <span class="block text-[10px] text-gray-400 font-mono">
-                  ${{ item.totalRevenue.toFixed(2) }}
+                <span class="block text-[11px] text-gray-500 dark:text-gray-400">
+                  ${{ cat.totalRevenueUSD.toFixed(2) }}
                 </span>
               </div>
             </div>
           </div>
 
           <div v-else class="text-center py-8 text-gray-400 text-xs">
-            មិនទាន់មានទិន្នន័យមុខម្ហូបលក់ចេញនៅថ្ងៃនេះទេ
+            មិនទាន់មានទិន្នន័យលក់តាមប្រភេទនៅថ្ងៃនេះទេ
           </div>
         </div>
 
         <!-- RIGHT: Detailed Orders Table (2 Columns) -->
-        <div class="lg:col-span-2 p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
+        <div
+          class="lg:col-span-2 p-5 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
           <div class="flex items-center justify-between">
             <div>
               <h2 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -287,12 +257,13 @@ function setDatePreset(type: 'today' | 'yesterday') {
               </h2>
               <p class="text-xs text-gray-500">រាល់ Order ទាំងអស់ដែល Cashier បានកត់ត្រា</p>
             </div>
-            <span class="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+            <span
+              class="px-2.5 py-1 text-xs font-mono font-semibold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
               {{ report.orders.length }} វិក្កយបត្រ
             </span>
           </div>
 
-          <div v-if="report.orders.length > 0" class="overflow-x-auto">
+          <div v-if="report.orders.length > 0" class="overflow-x-auto lg:overflow-visible">
             <table class="w-full text-left text-xs">
               <thead class="border-b border-gray-200 dark:border-gray-800 text-gray-500 font-medium">
                 <tr>
@@ -305,66 +276,89 @@ function setDatePreset(type: 'today' | 'yesterday') {
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                <tr v-for="ord in report.orders" :key="ord.id" class="hover:bg-gray-50/50 dark:hover:bg-gray-800/40">
-                  <td class="py-2.5 px-3 font-mono font-bold text-gray-900 dark:text-white">
-                    #{{ ord.orderNumber }}
+                <tr v-for="ord in report.orders" :key="ord.id"
+                  class="group/row hover:bg-gray-50/70 dark:hover:bg-gray-800/40 align-top cursor-pointer transition-colors"
+                  @click="selectedOrderDetail = ord">
+                  <td class="relative py-3 px-3 font-mono font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                    <span>#{{ ord.orderNumber }}</span>
+
+                    <!-- Hover Popover: Service Order & Service គិតលុយ -->
+                    <div
+                      class="pointer-events-none opacity-0 invisible group-hover/row:opacity-100 group-hover/row:visible transition-all duration-150 absolute left-2 top-full mt-1 z-30 w-60 rounded-2xl bg-gray-900 dark:bg-gray-800 text-white p-3 shadow-xl border border-gray-700/80 font-sans font-normal text-[11px] space-y-1.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-gray-400">អ្នកកត់ Order (Service)</span>
+                        <span class="font-bold text-emerald-400 truncate">{{ ord.waiterName || 'Cashier' }}</span>
+                      </div>
+                      <div v-if="ord.billedBy" class="flex items-center justify-between gap-2">
+                        <span class="text-gray-400">អ្នកកាន់បុងគិតលុយ</span>
+                        <span class="font-bold text-purple-300 truncate">{{ ord.billedBy }}</span>
+                      </div>
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-gray-400">អ្នកគិតលុយ (Cashier)</span>
+                        <span class="font-mono font-bold text-sky-300 truncate">{{ ord.cashierName || 'Cashier 01' }}</span>
+                      </div>
+                    </div>
                   </td>
-                  <td class="py-2.5 px-3">
-                    <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400">
+                  <td class="py-3 px-3 whitespace-nowrap">
+                    <span
+                      class="px-2 py-0.5 rounded text-[11px] font-bold bg-primary-50 dark:bg-primary-950 text-primary-600 dark:text-primary-400">
                       {{ ord.tableNumber }}
                     </span>
                   </td>
-                  <td class="py-2.5 px-3 max-w-xs">
-                    <p class="truncate text-gray-700 dark:text-gray-300">
-                      {{ ord.items.map((i) => `${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''} x${i.quantity}`).join(', ') }}
-                    </p>
+                  <td class="py-3 px-3 min-w-[220px]">
+                    <ul class="space-y-1">
+                      <li v-for="(it, iIdx) in ord.items" :key="iIdx"
+                        class="flex items-start justify-between gap-2 text-[11px] leading-snug">
+                        <span class="text-gray-800 dark:text-gray-200">
+                          <span class="font-mono font-bold text-primary-600 dark:text-primary-400">{{ it.quantity }}x</span>
+                          {{ it.name }}
+                          <span v-if="it.variantLabel" class="text-gray-400">({{ it.variantLabel }})</span>
+                        </span>
+                        <span class="font-mono text-gray-500 dark:text-gray-400 shrink-0">
+                          ${{ Number(it.subtotal).toFixed(2) }}
+                        </span>
+                      </li>
+                    </ul>
                   </td>
-                  <td class="py-2.5 px-3">
-                    <span
-                      class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase font-mono"
-                      :class="[
-                        ord.paymentMethod === 'khqr'
-                          ? 'bg-rose-50 dark:bg-rose-950 text-rose-600'
-                          : ord.paymentMethod === 'card'
+                  <td class="py-3 px-3 whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase font-mono" :class="[
+                      ord.paymentMethod === 'khqr'
+                        ? 'bg-rose-50 dark:bg-rose-950 text-rose-600'
+                        : ord.paymentMethod === 'card'
                           ? 'bg-blue-50 dark:bg-blue-950 text-blue-600'
                           : ord.paymentMethod === 'mixed'
-                          ? 'bg-amber-50 dark:bg-amber-950 text-amber-600'
-                          : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600',
-                      ]"
-                    >
-                      {{ ord.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (ord.paymentMethod === 'khqr' ? 'KHQR' : (ord.paymentMethod === 'mixed' ? 'បង់ចម្រុះ' : 'កាត')) }}
+                            ? 'bg-amber-50 dark:bg-amber-950 text-amber-600'
+                            : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600',
+                    ]">
+                      {{ ord.paymentMethod === 'cash' ? 'សាច់ប្រាក់' : (ord.paymentMethod === 'khqr' ? 'KHQR' :
+                        (ord.paymentMethod === 'mixed' ? 'បង់ចម្រុះ' : (ord.paymentMethod === 'card' ? 'កាត' : (ord.paymentMethod || 'សាច់ប្រាក់').toUpperCase()))) }}
                     </span>
                   </td>
-                  <td class="py-2.5 px-3">
-                    <span
-                      class="px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1"
-                      :class="[
-                        ord.paymentStatus === 'paid'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50'
-                          : ord.paymentStatus === 'billed'
+                  <td class="py-3 px-3 whitespace-nowrap">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center gap-1" :class="[
+                      ord.paymentStatus === 'paid'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50'
+                        : ord.paymentStatus === 'billed'
                           ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200/50'
                           : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/50',
-                      ]"
-                    >
-                      <span
-                        class="w-1.5 h-1.5 rounded-full"
-                        :class="[
-                          ord.paymentStatus === 'paid'
-                            ? 'bg-emerald-500'
-                            : ord.paymentStatus === 'billed'
+                    ]">
+                      <span class="w-1.5 h-1.5 rounded-full" :class="[
+                        ord.paymentStatus === 'paid'
+                          ? 'bg-emerald-500'
+                          : ord.paymentStatus === 'billed'
                             ? 'bg-purple-500'
                             : 'bg-amber-500',
-                        ]"
-                      ></span>
-                      {{ ord.paymentStatus === 'paid' ? 'បានបង់' : ord.paymentStatus === 'billed' ? 'សុំមើលបុង' : 'កំពុងញ៉ាំ' }}
+                      ]"></span>
+                      {{ ord.paymentStatus === 'paid' ? 'បានបង់' : ord.paymentStatus === 'billed' ? 'សុំមើលបុង' :
+                        'កំពុងញ៉ាំ' }}
                     </span>
                   </td>
-                  <td class="py-2.5 px-3 text-right">
+                  <td class="py-3 px-3 text-right whitespace-nowrap">
                     <span class="font-black font-mono text-gray-900 dark:text-white">
-                      ${{ Number(ord.totalAmount).toFixed(2) }}
+                      {{ formatRiel(Number(ord.totalAmount)) }} ៛
                     </span>
                     <span class="block text-[10px] text-gray-400 font-mono">
-                      ~{{ formatRiel(Number(ord.totalAmount)) }} ៛
+                      ${{ Number(ord.totalAmount).toFixed(2) }}
                     </span>
                   </td>
                 </tr>
@@ -378,6 +372,90 @@ function setDatePreset(type: 'today' | 'yesterday') {
         </div>
       </div>
     </div>
+
+    <!-- ORDER DETAIL MODAL -->
+    <div v-if="selectedOrderDetail"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      @click.self="selectedOrderDetail = null">
+      <div
+        class="w-full max-w-md bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl max-h-[88vh] flex flex-col overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+          <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white">
+              ព័ត៌មានលម្អិតវិក្កយបត្រ #{{ selectedOrderDetail.orderNumber }}
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              {{ selectedOrderDetail.tableNumber }} • {{ new Date(selectedOrderDetail.createdAt || Date.now()).toLocaleString() }}
+            </p>
+          </div>
+          <button type="button"
+            class="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer"
+            @click="selectedOrderDetail = null">
+            <UIcon name="i-heroicons-x-mark" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 space-y-4">
+          <div class="rounded-2xl bg-gray-50 dark:bg-gray-800/50 p-3.5 text-xs space-y-1.5">
+            <div class="flex justify-between">
+              <span class="text-gray-500">អ្នកកត់ Order (Waiter)</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ selectedOrderDetail.waiterName || 'Cashier' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">បេឡាករ (Cashier)</span>
+              <span class="font-mono font-semibold text-gray-800 dark:text-gray-200">{{ selectedOrderDetail.cashierName || 'Cashier 01' }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">វិធីទូទាត់</span>
+              <span class="font-bold uppercase">{{ selectedOrderDetail.paymentMethod }}</span>
+            </div>
+          </div>
+
+          <div class="divide-y divide-gray-100 dark:divide-gray-800">
+            <div v-for="(it, idx) in selectedOrderDetail.items" :key="idx"
+              class="py-2.5 flex items-start justify-between gap-3 text-xs">
+              <div>
+                <p class="font-bold text-gray-900 dark:text-white">
+                  <span class="font-mono text-primary-600 dark:text-primary-400">{{ it.quantity }}x</span>
+                  {{ it.name }}
+                </p>
+                <p v-if="it.variantLabel || it.note" class="text-[11px] text-gray-500 mt-0.5">
+                  <span v-if="it.variantLabel">{{ it.variantLabel }}</span>
+                  <span v-if="it.note"> • {{ it.note }}</span>
+                </p>
+              </div>
+              <div class="text-right font-mono shrink-0">
+                <p class="font-bold text-gray-900 dark:text-white">{{ formatRiel(Number(it.subtotal)) }} ៛</p>
+                <p class="text-[10px] text-gray-400">${{ Number(it.subtotal).toFixed(2) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedOrderDetail.note"
+            class="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-xs text-indigo-700 dark:text-indigo-300">
+            {{ selectedOrderDetail.note }}
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+            <span class="text-xs font-bold text-emerald-800 dark:text-emerald-300">សរុបត្រូវទូទាត់</span>
+            <div class="text-right font-mono">
+              <p class="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                {{ formatRiel(Number(selectedOrderDetail.totalAmount)) }} ៛
+              </p>
+              <p class="text-xs text-gray-500">${{ Number(selectedOrderDetail.totalAmount).toFixed(2) }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-5 py-3.5 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900">
+          <button type="button"
+            class="w-full py-2.5 rounded-xl text-xs font-bold bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-700 cursor-pointer"
+            @click="selectedOrderDetail = null">
+            បិទ
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -386,10 +464,12 @@ function setDatePreset(type: 'today' | 'yesterday') {
   body * {
     visibility: hidden;
   }
+
   #daily-report-printable,
   #daily-report-printable * {
     visibility: visible;
   }
+
   #daily-report-printable {
     position: absolute;
     left: 0;

@@ -4,6 +4,7 @@ import pkg from "./package.json";
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
+    "nitro-cloudflare-dev",
     "@nuxt/eslint",
     "@nuxt/ui",
     "@nuxt/image",
@@ -77,6 +78,7 @@ export default defineNuxtConfig({
   css: ["~/assets/css/main.css"],
 
   nitro: {
+    preset: "cloudflare-pages",
     prerender: {
       routes: ["/", "/explore", "/pricing", "/sitemap.xml", "/robots.txt"],
       ignore: ["/admin"],

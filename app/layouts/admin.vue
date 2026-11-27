@@ -3,6 +3,7 @@ const { user, logout } = useAuth();
 const route = useRoute();
 
 const isMobileMenuOpen = ref(false);
+const isPosPage = computed(() => route.path === '/admin/pos' || route.path.startsWith('/admin/pos/') || route.path === '/admin/menu' || route.path.startsWith('/admin/menu/') || route.path === "/admin/reports" || route.path === "/admin");
 
 const adminNav = [
   { label: 'ផ្ទាំងទូទៅ', icon: 'i-heroicons-chart-pie', to: '/admin' },
@@ -36,8 +37,10 @@ watch(() => route.path, () => {
             <UIcon name="i-heroicons-shield-check" class="w-6 h-6" />
           </div>
           <div>
-            <span class="font-extrabold text-base tracking-tight text-gray-900 dark:text-white block leading-none">ផ្ទាំងគ្រប់គ្រង</span>
-            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono tracking-wider">ប្រព័ន្ធគ្រប់គ្រងភោជនីយដ្ឋាន</span>
+            <span
+              class="font-extrabold text-base tracking-tight text-gray-900 dark:text-white block leading-none">ផ្ទាំងគ្រប់គ្រង</span>
+            <span
+              class="text-[10px] text-gray-500 dark:text-gray-400 font-mono tracking-wider">ប្រព័ន្ធគ្រប់គ្រងភោជនីយដ្ឋាន</span>
           </div>
         </NuxtLink>
 
@@ -109,8 +112,8 @@ watch(() => route.path, () => {
 
     <!-- Main Content Container (Offset by Sidebar on Desktop) -->
     <div class="md:pl-64 flex-1 flex flex-col min-w-0">
-      <!-- Top Header Navigation Bar -->
-      <header
+      <!-- Top Header Navigation Bar (Hidden on POS page for more workspace) -->
+      <header v-if="!isPosPage"
         class="sticky top-0 z-20 h-16 border-b border-gray-200 dark:border-gray-800/80 px-4 sm:px-6 flex items-center justify-between bg-white/80 dark:bg-gray-900/80 backdrop-blur-md transition-colors">
 
         <!-- Left: Mobile Menu Trigger & Title -->
@@ -135,10 +138,15 @@ watch(() => route.path, () => {
             title="System Settings" />
 
           <!-- Profile Badge -->
-          <NuxtLink to="/user/profile" class="flex items-center gap-2.5 border-l border-gray-200 dark:border-gray-800 pl-3 sm:pl-4 hover:opacity-85 transition-opacity group" title="Click to view & update profile">
-            <UAvatar :src="user?.avatarUrl || undefined" :alt="user?.name || 'Super Admin'" size="sm" class="ring-2 ring-primary-500/40 group-hover:ring-primary-500 transition-all" />
+          <NuxtLink to="/user/profile"
+            class="flex items-center gap-2.5 border-l border-gray-200 dark:border-gray-800 pl-3 sm:pl-4 hover:opacity-85 transition-opacity group"
+            title="Click to view & update profile">
+            <UAvatar :src="user?.avatarUrl || undefined" :alt="user?.name || 'Super Admin'" size="sm"
+              class="ring-2 ring-primary-500/40 group-hover:ring-primary-500 transition-all" />
             <div class="text-left hidden sm:block">
-              <p class="font-semibold text-xs text-gray-900 dark:text-gray-100 leading-tight group-hover:text-primary-500 transition-colors">{{ user?.name || 'Super Admin' }}</p>
+              <p
+                class="font-semibold text-xs text-gray-900 dark:text-gray-100 leading-tight group-hover:text-primary-500 transition-colors">
+                {{ user?.name || 'Super Admin' }}</p>
               <p class="text-gray-500 dark:text-gray-400 text-[10px] leading-tight font-mono truncate max-w-[140px]">{{
                 user?.email || 'admin@domain.com' }}</p>
             </div>
@@ -147,8 +155,16 @@ watch(() => route.path, () => {
         </div>
       </header>
 
+      <!-- Mobile Menu Trigger when Header is Hidden on POS -->
+      <button v-if="isPosPage" @click="isMobileMenuOpen = true"
+        class="md:hidden fixed bottom-4 left-4 z-30 p-2.5 rounded-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none"
+        aria-label="Open Navigation Menu">
+        <UIcon name="i-heroicons-bars-3" class="w-5 h-5" />
+      </button>
+
       <!-- Main Page Slot -->
-      <main class="flex-1 p-4 sm:p-6 md:p-8 bg-gray-50 dark:bg-gray-950 transition-colors">
+      <main class="flex-1 bg-gray-50 dark:bg-gray-950 transition-colors"
+        :class="isPosPage ? 'p-3 sm:p-4 md:p-5' : 'p-4 sm:p-6 md:p-8'">
         <slot />
       </main>
     </div>

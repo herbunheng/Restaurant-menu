@@ -402,7 +402,7 @@ export const OrderSchema = z.object({
   subtotal: z.number(),
   discount: z.number().default(0),
   totalAmount: z.number(),
-  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).default('cash'),
+  paymentMethod: z.string().min(1).default('cash'),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).default('paid'),
   cashierName: z.string().optional().default('Cashier'),
   waiterName: z.string().nullable().optional(),
@@ -419,7 +419,7 @@ export const CreateOrderInputSchema = z.object({
   tableNumber: z.string().min(1, 'Table number is required'),
   items: z.array(OrderItemSchema).min(1, 'Order must contain at least one item'),
   discount: z.coerce.number().min(0).optional().default(0),
-  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional().default('cash'),
+  paymentMethod: z.string().min(1).optional().default('cash'),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional().default('paid'),
   cashierName: z.string().optional().default('Cashier'),
   waiterName: z.string().optional().default(''),
@@ -434,7 +434,7 @@ export const UpdateOrderInputSchema = z.object({
   tableNumber: z.string().optional(),
   items: z.array(OrderItemSchema).optional(),
   discount: z.coerce.number().min(0).optional(),
-  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional(),
+  paymentMethod: z.string().min(1).optional(),
   paymentStatus: z.enum(['paid', 'pending', 'billed', 'cancelled']).optional(),
   cashierName: z.string().optional(),
   waiterName: z.string().optional(),
@@ -447,7 +447,7 @@ export type UpdateOrderInput = z.infer<typeof UpdateOrderInputSchema>;
 
 export const SplitPayInputSchema = z.object({
   itemsToPay: z.array(OrderItemSchema).min(1, 'At least one item must be selected to pay'),
-  paymentMethod: z.enum(['cash', 'khqr', 'card', 'mixed']).optional().default('cash'),
+  paymentMethod: z.string().min(1).optional().default('cash'),
   discount: z.coerce.number().min(0).optional().default(0),
   cashierName: z.string().optional().default('Cashier'),
   note: z.string().optional().default(''),
@@ -462,17 +462,73 @@ export interface TopSellingItem {
   totalRevenue: number;
 }
 
+export interface CategorySalesSummary {
+  categoryId: string;
+  categoryName: string;
+  totalQuantity: number;
+  totalRevenueUSD: number;
+  totalRevenueKHR: number;
+}
+
+export interface PaymentMethodSalesSummary {
+  code: string;
+  name: string;
+  totalOrders: number;
+  totalUSD: number;
+  totalKHR: number;
+}
+
+export const LedgerEntryTypeSchema = z.enum(['receivable', 'payable', 'repayment', 'owner_meal']);
+export type LedgerEntryType = z.infer<typeof LedgerEntryTypeSchema>;
+
+export const LedgerEntrySchema = z.object({
+  id: z.string(),
+  type: LedgerEntryTypeSchema,
+  personName: z.string().nullable().optional(),
+  amountKHR: z.number().int().min(0).default(0),
+  amountUSD: z.number().min(0).default(0),
+  note: z.string().nullable().optional(),
+  recordedBy: z.string().nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]).nullable().optional(),
+});
+export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
+
+export const CreateLedgerEntryInputSchema = z.object({
+  type: LedgerEntryTypeSchema,
+  personName: z.string().nullable().optional(),
+  amountKHR: z.coerce.number().int().min(0).default(0),
+  amountUSD: z.coerce.number().min(0).default(0),
+  note: z.string().nullable().optional(),
+  recordedBy: z.string().nullable().optional(),
+});
+export type CreateLedgerEntryInput = z.infer<typeof CreateLedgerEntryInputSchema>;
+
 export interface DailyReport {
   date: string;
+  exchangeRate?: number;
   totalOrders: number;
   totalRevenueUSD: number;
   totalRevenueKHR: number;
+  unpaidOrdersUSD?: number;
+  unpaidOrdersKHR?: number;
+  receivableUSD?: number;
+  receivableKHR?: number;
+  payableUSD?: number;
+  payableKHR?: number;
+  repaymentUSD?: number;
+  repaymentKHR?: number;
+  ownerMealCount?: number;
+  ownerMealUSD?: number;
+  ownerMealKHR?: number;
   paymentBreakdown: {
     cashUSD: number;
     khqrUSD: number;
     cardUSD: number;
   };
+  paymentMethodBreakdown?: PaymentMethodSalesSummary[];
   topSellingItems: TopSellingItem[];
+  categoryBreakdown: CategorySalesSummary[];
+  ledgerEntries?: LedgerEntry[];
   orders: Order[];
 }
 
@@ -543,6 +599,7 @@ export type CreatePaymentMethodInput = z.infer<typeof CreatePaymentMethodInputSc
 
 export const UpdatePaymentMethodInputSchema = CreatePaymentMethodInputSchema.partial();
 export type UpdatePaymentMethodInput = z.infer<typeof UpdatePaymentMethodInputSchema>;
+
 
 
 
